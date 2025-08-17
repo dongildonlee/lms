@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Practice | Wrong-Answer Packets{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Student Practice</h1>
+
+<div class="bg-white shadow rounded-lg p-4 mb-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="text-sm text-gray-600">Student ID: <strong>{{ me_sid }}</strong></div>
+    <label class="ml-auto text-sm">Tag (optional)</label>
+    <input id="tag" class="border rounded px-3 py-2" placeholder="e.g. Calculus" />
+    <button id="startBtn" class="bg-brand text-white px-4 py-2 rounded">Start Practice</button>
+    <a class="text-brand underline" href="/teacher/" target="_blank">Open Teacher View</a>
+  </div>
+  <div id="status" class="mt-2 text-gray-600"></div>
+</div>
+
+<div id="qCard" class="bg-white shadow rounded-lg p-4 hidden">
+  <div id="stem" class="text-lg mb-3"></div>
+  <div id="choices"></div>
+  <div id="feedback" class="mt-3 font-semibold"></div>
+  <div class="mt-4">
+    <button id="nextBtn" class="border px-4 py-2 rounded">Next Question</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (sel) => document.querySelector(sel);
+let attemptId = null;
+let currentQ = null;
+
+// CSRF cookie helper
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
+const csrftoken = getCookie('csrftoken');
+
+// Fetch helper
+async function api(url, opts = {}) {
+  const o = Object.assign({ headers: {} }, opts);
+  if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
+  if (opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
+  const res = await fetch(url, o);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Typeset only the card for speed
+async function typeset() {
+  const card = $('#qCard');
+  if (window.MathJax && MathJax.typesetPromise && card) {
+    await MathJax.typesetPromise([card]);
+  }
+}
+
+async function startPractice() {
+  try {
+    const data = await api('/api/attempts/', {
+      method: 'POST',
+      body: JSON.stringify({ assignment_title: 'Practice' })
+    });
+    attemptId = data.attempt_id;
+    $('#status').textContent = `Attempt #${attemptId} started.`;
+    await loadQuestion();
+  } catch (err) {
+    $('#status').textContent = `Failed to start: ${err.message}`;
+  }
+}
+
+async function loadQuestion() {
+  $('#qCard').classList.remove('hidden'); // show card so Next is visible
+  try {
+    const tag = $('#tag').value.trim();
+    const url = `/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`;
+    const qRes = await api(url);
+
+    if (!qRes.count) {
+      $('#stem').innerHTML = 'No questions found. Add some in <code>/admin</code> or clear the tag.';
+      $('#choices').innerHTML = '';
+      $('#feedback').textContent = '';
+      $('#status').textContent = 'No questions found.';
+      await typeset();
+      return;
+    }
+
+    currentQ = qRes.questions[0];
+
+    // Problem text (allow TeX rendering)
+    $('#stem').innerHTML = currentQ.stem_md || '';
+
+    // Choices
+    const choicesDiv = $('#choices');
+    choicesDiv.innerHTML = '';
+    const choices = currentQ.choices || {};
+    for (const [key, label] of Object.entries(choices)) {
+      const btn = document.createElement('button');
+      btn.className = 'choice block w-full text-left border rounded px-3 py-2 my-2 hover:bg-gray-50';
+      btn.innerHTML = `${key}) ${label}`; // innerHTML so MathJax can render
+      btn.onclick = () => submitAnswer(key);
+      choicesDiv.appendChild(btn);
+    }
+
+    $('#feedback').textContent = '';
+    $('#status').textContent = '';
+    await typeset();
+  } catch (err) {
+    console.error('loadQuestion error:', err);
+    $('#status').textContent = `Failed to load question: ${err.message}`;
+    $('#stem').innerHTML = '';
+    $('#choices').innerHTML = '';
+    $('#feedback').textContent = '';
+  }
+}
+
+async function submitAnswer(choiceKey) {
+  if (!attemptId || !currentQ) return;
+  try {
+    const res = await api(`/api/attempts/${attemptId}/items/`, {
+      method: 'POST',
+      body: JSON.stringify({ question_id: currentQ.id, answer: { choice: choiceKey } })
+    });
+    $('#feedback').textContent = res.is_correct ? '✅ Correct' : '❌ Incorrect';
+    $('#feedback').className = res.is_correct ? 'mt-3 font-semibold text-green-600' : 'mt-3 font-semibold text-red-600';
+  } catch (err) {
+    $('#feedback').textContent = `Submit failed: ${err.message}`;
+    $('#feedback').className = 'mt-3 font-semibold text-red-600';
+  }
+}
+
+$('#startBtn').addEventListener('click', startPractice);
+$('#nextBtn').addEventListener('click', loadQuestion);
+</script>
+{% endblock %}

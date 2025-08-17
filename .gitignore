@@ -1,0 +1,21 @@
+# Python / venv
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Django
+db.sqlite3
+staticfiles/
+
+# Node (if you add later)
+node_modules/
+
+# macOS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Env files (never commit secrets)
+.env

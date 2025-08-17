@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Teacher — Still-Missed (POC)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; max-width: 760px; margin: 24px auto; padding: 0 12px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; }
+    input[type="text"] { padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; }
+    .q { padding: 8px 10px; border-bottom: 1px solid #eee; }
+    small { color: #666; }
+  </style>
+
+  <!-- MathJax (put config BEFORE the script tag) -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+  <h1>Teacher View — Still-Missed Problems (POC)</h1>
+
+  <div class="card">
+    <label>Student ID:</label>
+    <input id="studentId" type="text" placeholder="e.g. 1" />
+    <button id="loadBtn">Load still-missed</button>
+    <button id="pdfBtn">Download PDF</button>
+    <div id="status" style="margin-top:8px;color:#555;"></div>
+  </div>
+
+  <div class="card">
+    <h3>Current Still-Missed</h3>
+    <div id="list"></div>
+  </div>
+
+  <script>
+    const $ = (s)=>document.querySelector(s);
+
+    async function typeset() {
+      if (window.MathJax?.typesetPromise) {
+        await MathJax.typesetPromise();
+      }
+    }
+
+    async function load() {
+      const sid = $('#studentId').value.trim();
+      if (!sid) { $('#status').textContent = 'Enter a Student ID.'; return; }
+
+      const res = await fetch(`/api/students/${sid}/wrong-questions/`);
+      if (!res.ok) { $('#status').textContent = 'Failed to load.'; return; }
+
+      const data = await res.json();
+      $('#status').textContent = `Found ${data.count} question(s).`;
+
+      const list = $('#list');
+      list.innerHTML = '';
+      data.questions.forEach(q => {
+        const div = document.createElement('div');
+        div.className = 'q';
+        // Use innerHTML so MathJax can render TeX
+        div.innerHTML = `<strong>Q${q.id}</strong> — ${q.stem_md} <br><small>tags: ${q.tags.join(', ')}</small>`;
+        list.appendChild(div);
+      });
+      // Ask MathJax to typeset after updating the DOM
+      if (window.MathJax?.typesetPromise) MathJax.typesetPromise();
+
+      await typeset();
+    }
+
+    $('#loadBtn').addEventListener('click', load);
+    $('#pdfBtn').addEventListener('click', () => {
+      const sid = $('#studentId').value.trim();
+      if (!sid) { alert('Enter a Student ID first.'); return; }
+      window.open(`/api/students/${sid}/wrong-questions/pdf`, '_blank');
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+

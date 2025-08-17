@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Create account</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; max-width: 420px; margin: 60px auto; }
+    label { font-weight: 600; }
+    .row { margin-bottom: 10px; }
+    .err { color:#c00; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <h1>Create account</h1>
+
+  {% if form.non_field_errors %}
+    <div class="err">
+      {% for e in form.non_field_errors %}{{ e }}<br>{% endfor %}
+    </div>
+  {% endif %}
+  {% if form.errors %}
+    <div class="err" style="margin-bottom:8px;">Please fix the errors below.</div>
+  {% endif %}
+
+  <form method="post" action="">
+    {% csrf_token %}
+
+    <div class="row">
+      <label for="{{ form.username.id_for_label }}">Username</label><br>
+      {{ form.username }}
+      {% for e in form.username.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="row">
+      <label for="{{ form.first_name.id_for_label }}">First name</label><br>
+      {{ form.first_name }}
+      {% for e in form.first_name.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="row">
+      <label for="{{ form.last_name.id_for_label }}">Last name</label><br>
+      {{ form.last_name }}
+      {% for e in form.last_name.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="row">
+      <label for="{{ form.email.id_for_label }}">Email</label><br>
+      {{ form.email }}
+      {% for e in form.email.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="row">
+      <label for="{{ form.password1.id_for_label }}">Password</label><br>
+      {{ form.password1 }}
+      {% for e in form.password1.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="row">
+      <label for="{{ form.password2.id_for_label }}">Confirm password</label><br>
+      {{ form.password2 }}
+      {% for e in form.password2.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="row">
+      <label for="{{ form.date_of_birth.id_for_label }}">Date of birth (optional)</label><br>
+      {{ form.date_of_birth }}
+      {% for e in form.date_of_birth.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <button style="margin-top:12px;">Create account</button>
+  </form>
+
+  <p style="margin-top:12px;">
+    Already have an account? <a href="{% url 'login' %}">Sign in</a>
+  </p>
+</body>
+</html>
+
+

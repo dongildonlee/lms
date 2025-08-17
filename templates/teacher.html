@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Teacher | Wrong-Answer Packets{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Teacher — Still-Missed Problems</h1>
+
+<div class="bg-white shadow rounded-lg p-4 mb-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <label class="text-sm">Student ID (numeric):</label>
+    <input id="studentId" class="border rounded px-3 py-2" placeholder="e.g. 2" />
+    <button id="loadBtn" class="bg-brand text-white px-4 py-2 rounded">Load still-missed</button>
+    <button id="pdfBtn" class="border px-4 py-2 rounded">Download PDF</button>
+    <div id="status" class="ml-auto text-gray-600"></div>
+  </div>
+</div>
+
+<div class="bg-white shadow rounded-lg p-4">
+  <h3 class="font-semibold mb-2">Current Still-Missed</h3>
+  <div id="list" class="divide-y"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (s)=>document.querySelector(s);
+
+async function load() {
+  const sid = $('#studentId').value.trim();
+  if (!sid) { $('#status').textContent = 'Enter a Student ID.'; return; }
+  const res = await fetch(`/api/students/${sid}/wrong-questions/`);
+  if (!res.ok) { $('#status').textContent = 'Failed to load.'; return; }
+  const data = await res.json();
+  $('#status').textContent = `Found ${data.count} question(s).`;
+  const list = $('#list');
+  list.innerHTML = '';
+  data.questions.forEach(q => {
+    const div = document.createElement('div');
+    div.className = 'py-3';
+    div.innerHTML = `<div class="font-medium">Q${q.id}</div>
+                     <div class="text-gray-700">${q.stem_md}</div>
+                     <div class="text-sm text-gray-500 mt-1">tags: ${q.tags.join(', ')}</div>`;
+    list.appendChild(div);
+  });
+  if (window.MathJax?.typesetPromise) MathJax.typesetPromise([document.getElementById('list')]);
+}
+
+$('#loadBtn').addEventListener('click', load);
+$('#pdfBtn').addEventListener('click', () => {
+  const sid = $('#studentId').value.trim();
+  if (!sid) { alert('Enter a Student ID first.'); return; }
+  window.open(`/api/students/${sid}/wrong-questions/pdf`, '_blank');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Sign in | Wrong-Answer Packets{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto bg-white shadow rounded-lg p-6">
+  <h1 class="text-xl font-semibold mb-4">Sign in</h1>
+
+  {% if form.non_field_errors %}
+    <div class="text-red-600 mb-3">
+      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+    </div>
+  {% endif %}
+  {% if form.errors and not form.non_field_errors %}
+    <div class="text-red-600 mb-3">Invalid username or password.</div>
+  {% endif %}
+
+  <form method="post" action="{% url 'login' %}" class="space-y-4">
+    {% csrf_token %}
+
+    {# preserve ?next=... so users return to where they came from #}
+    {% if request.GET.next %}
+      <input type="hidden" name="next" value="{{ request.GET.next }}">
+    {% endif %}
+
+    <div>
+      <label class="text-sm text-gray-700" for="{{ form.username.id_for_label }}">Username</label>
+      {{ form.username }}
+      {% for e in form.username.errors %}<div class="text-red-600 text-sm">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div>
+      <label class="text-sm text-gray-700" for="{{ form.password.id_for_label }}">Password</label>
+      {{ form.password }}
+      {% for e in form.password.errors %}<div class="text-red-600 text-sm">{{ e }}</div>{% endfor %}
+    </div>
+
+    <button class="bg-brand text-white px-4 py-2 rounded">Sign in</button>
+  </form>
+
+  <p class="text-sm text-gray-600 mt-3">
+    New here? <a class="text-brand underline" href="{% url 'register' %}">Create an account</a>
+  </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const u = document.getElementById("id_username");
+  if (u) u.focus();
+</script>
+{% endblock %}
+
+
