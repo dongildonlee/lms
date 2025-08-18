@@ -1,0 +1,416 @@
+\documentclass[12pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\usepackage{booktabs,array}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+{\LARGE \textbf{Practice Exercises}}
+
+\bigskip
+\noindent\textbf{PART A. NO CALCULATOR—DIRECTIONS:} Answer these questions \emph{without} using your calculator.
+
+\begin{enumerate}[label=\textbf{A\arabic*.}]
+
+% --- A1
+\item The slope of the curve $y^{3}-xy^{2}=4$ at the point where $y=2$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $-2$ \item $-\dfrac12$ \item $\dfrac12$ \item $2$
+\end{enumerate}
+
+% --- A2
+\item The slope of the curve $y^{2}-xy-3x=1$ at the point $(0,-1)$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $-1$ \item $-2$ \item $1$ \item $2$
+\end{enumerate}
+
+% --- A3
+\item An equation of the tangent to the curve $y=x\sin x$ at the point $\bigl(\tfrac{\pi}{2},\tfrac{\pi}{2}\bigr)$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $y=x-\pi$ \item $y=\dfrac{\pi}{2}$ \item $y=\pi-x$ \item $y=x$
+\end{enumerate}
+
+% --- A4
+\item The tangent to the curve $y=xe^{-x}$ is horizontal when $x$ is equal to
+\begin{enumerate}[label=(\Alph*)]
+\item $0$ \item $1$ \item $-1$ \item $\dfrac{1}{e}$
+\end{enumerate}
+
+% --- A5
+\item The minimum value of the slope of the curve $y=x^{5}+x^{3}-2x$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $2$ \item $6$ \item $-2$ \item $-6$
+\end{enumerate}
+
+% --- A6
+\item An equation of the tangent to the hyperbola $x^{2}-y^{2}=12$ at the point $(4,2)$ on the curve is
+\begin{enumerate}[label=(\Alph*)]
+\item $x-2y+6=0$ \item $y=2x$ \item $y=2x-6$ \item $y=\dfrac{x}{2}$
+\end{enumerate}
+
+% --- A7
+\item A tangent to the curve $y^{2}-xy+9=0$ is vertical when
+\begin{enumerate}[label=(\Alph*)]
+\item $y=0$ \item $y=\pm\sqrt{3}$ \item $y=\dfrac12$ \item $y=\pm 3$
+\end{enumerate}
+
+% --- A8
+\item The volume of a sphere is given by $V=\dfrac{4}{3}\pi r^{3}$. Use a tangent line to approximate the increase in volume (in $\text{in}^{3}$) when the radius increases from $3$ to $3.1$ inches.
+\begin{enumerate}[label=(\Alph*)]
+\item $\dfrac{0.04\pi}{3}$ \item $0.04\pi$ \item $1.2\pi$ \item $3.6\pi$
+\end{enumerate}
+
+% --- A9
+\item When $x=3$, the equation $2x^{2}-y^{3}=10$ has the solution $y=2$. Using the tangent line to the curve, approximate $y$ when $x=3.04$.
+\begin{enumerate}[label=(\Alph*)]
+\item $1.6$ \item $1.96$ \item $2.04$ \item $2.4$
+\end{enumerate}
+
+\end{enumerate}
+
+\textbf{Challenge.}
+
+\begin{enumerate}[label=\textbf{A\arabic*.},resume]
+
+% --- A10
+\item If the side $e$ of a square is increased by $1\%$, then the area is increased approximately by
+\begin{enumerate}[label=(\Alph*)]
+\item $0.02e$ \item $0.02e^{2}$ \item $0.01e^{2}$ \item $0.01e$
+\end{enumerate}
+
+% --- A11
+\item The edge of a cube has length $10$ in., with a possible error of $1\%$. The possible error (in $\text{in}^{3}$) in the volume of the cube is
+\begin{enumerate}[label=(\Alph*)]
+\item $1$ \item $3$ \item $10$ \item $30$
+\end{enumerate}
+
+% --- A12
+\item The function $f(x)=x^{4}-4x^{2}$ has
+\begin{enumerate}[label=(\Alph*)]
+\item one local minimum and two local maxima
+\item one local minimum and no local maximum
+\item no local minimum and one local maximum
+\item two local minima and one local maximum
+\end{enumerate}
+
+% --- A13
+\item The number of inflection points on the graph of $f(x)=x^{4}-4x^{2}$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $0$ \item $1$ \item $2$ \item $3$
+\end{enumerate}
+
+% --- A14
+\item The maximum value of the function $y=-4\sqrt{\,2-x\,}$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $0$ \item $-4$ \item $-2$ \item $2$
+\end{enumerate}
+
+% --- A15
+\item The total number of local maximum and minimum points of a function whose derivative is $f'(x)=x(x-3)^{2}(x+1)^{4}$ (for all $x$) is
+\begin{enumerate}[label=(\Alph*)]
+\item $0$ \item $1$ \item $2$ \item $3$
+\end{enumerate}
+
+% --- A16 (figure with four curves)
+\item For which curve shown below are both $f'$ and $f''$ negative?
+\begin{center}
+\begin{tikzpicture}[scale=0.9]
+  % col / row / label / function in terms of \x
+  \foreach \col/\row/\lab/\fx in {
+    0/0/A/{-0.3*(\x+1)^2 - 0.6*\x - 0.2},
+    6/0/B/{ 0.2*(\x-0.4)^2 + 0.3*\x - 0.7},
+    0/-3.3/C/{ 0.25*(\x-0.6)^2 + 0.2*(\x-0.6) + 0.1},
+    6/-3.3/D/{-0.25*(\x-0.2)^2 + 0.6 - 0.2*\x}
+  }{
+    \begin{scope}[shift={(\col,\row)}]
+      \draw[->] (-1.6,0)--(1.6,0);
+      \draw[->] (0,-1.2)--(0,1.2);
+      \draw[domain=-1.4:1.4,smooth,thick] plot (\x,{\fx});
+      \node at (0,-1.45) {(\lab)};
+    \end{scope}
+  }
+\end{tikzpicture}
+\end{center}
+
+\begin{enumerate}[label=(\Alph*)]
+\item Curve (A) \item Curve (B) \item Curve (C) \item Curve (D)
+\end{enumerate}
+
+% --- A17
+\item For which curve shown in Question A16 is $f''>0$ but $f'<0$?
+\begin{enumerate}[label=(\Alph*)]
+\item Curve (A) \item Curve (B) \item Curve (C) \item Curve (D)
+\end{enumerate}
+
+\end{enumerate}
+
+\medskip\noindent\textit{In Questions A18–A21, the position of a particle moving along a horizontal line is given by $s=t^{3}-6t^{2}+12t-8$.}
+
+\begin{enumerate}[label=\textbf{A\arabic*.},resume]
+
+\item The object is moving to the right for
+\begin{enumerate}[label=(\Alph*)]
+\item $t<2$ \item all $t$ except $t=2$ \item all $t$ \item $t>2$
+\end{enumerate}
+
+\item The minimum value of the speed is
+\begin{enumerate}[label=(\Alph*)]
+\item $0$ \item $1$ \item $2$ \item $3$
+\end{enumerate}
+
+\item The acceleration is positive
+\begin{enumerate}[label=(\Alph*)]
+\item when $t>2$ \item for all $t$, $t\ne 2$ \item when $t<2$ \item for $1<t<2$
+\end{enumerate}
+
+\item The speed of the particle is decreasing for
+\begin{enumerate}[label=(\Alph*)]
+\item $t<2$ \item all $t$ \item $t<1$ or $t>2$ \item $t>2$
+\end{enumerate}
+
+\end{enumerate}
+
+\medskip\noindent\textit{In Questions A22–A24, a particle moves along a horizontal line with position $s=t^{4}-6t^{3}+12t^{2}+3$.}
+
+\begin{enumerate}[label=\textbf{A\arabic*.},resume]
+
+\item The particle is at rest when $t$ is equal to
+\begin{enumerate}[label=(\Alph*)]
+\item $1$ or $2$ \item $0$ \item $\dfrac{9}{4}$ \item $0,1,$ or $2$
+\end{enumerate}
+
+\item The velocity $v$ is increasing when
+\begin{enumerate}[label=(\Alph*)]
+\item $t>1$ \item $1<t<2$ \item $t<2$ \item $t<1$ or $t>2$
+\end{enumerate}
+
+\item The speed of the particle is increasing for
+\begin{enumerate}[label=(\Alph*)]
+\item $0<t<1$ or $t>2$ \item $1<t<2$ \item $t<2$ \item $t<0$ or $t>2$
+\end{enumerate}
+
+% --- A25
+\item The displacement from the origin of a particle moving on a line is $s=t^{4}-4t^{3}$. The maximum displacement during the time interval $-2\le t\le 4$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $27$ \item $3$ \item $48$ \item $16$
+\end{enumerate}
+
+% --- A26
+\item If a particle moves along a line according to $s=t^{5}+5t^{4}$, then the number of times it reverses direction is
+\begin{enumerate}[label=(\Alph*)]
+\item $0$ \item $1$ \item $2$ \item $3$
+\end{enumerate}
+
+\end{enumerate}
+
+\medskip\noindent\textit{*In Questions A27–A30, $\mathbf R=\langle 3\cos(\tfrac{\pi}{3}t),\,2\sin(\tfrac{\pi}{3}t)\rangle$ is the (position) vector $\langle x,y\rangle$ from the origin to a moving point $P(x,y)$ at time $t$.}
+
+\begin{enumerate}[label=\textbf{A\arabic*.},resume]
+
+\item A single equation in $x$ and $y$ for the path of the point is
+\begin{enumerate}[label=(\Alph*)]
+\item $x^{2}+y^{2}=13$
+\item $9x^{2}+4y^{2}=36$
+\item $2x^{2}+3y^{2}=13$
+\item $4x^{2}+9y^{2}=36$
+\end{enumerate}
+
+\item When $t=3$, the speed of the particle is
+\begin{enumerate}[label=(\Alph*)]
+\item $\dfrac{2\pi}{3}$ \item $2$ \item $3$ \item $\dfrac{\sqrt{13}}{3}\pi$
+\end{enumerate}
+
+\item The magnitude of the acceleration when $t=3$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $2$ \item $\dfrac{\pi^{2}}{3}$ \item $3$ \item $\dfrac{2\pi^{2}}{9}$
+\end{enumerate}
+
+\item At the point where $t=\tfrac12$, the slope of the curve along which the particle moves is
+\begin{enumerate}[label=(\Alph*)]
+\item $\dfrac{2\sqrt3}{9}$ \item $-\dfrac{\sqrt3}{2}$ \item $\dfrac{2}{\sqrt3}$ \item $-\dfrac{2\sqrt3}{3}$
+\end{enumerate}
+
+% --- A31
+\item A balloon is being filled with helium at the rate of $4\ \text{ft}^{3}/\text{min}$. The rate (in $\text{ft}^{2}/\text{min}$) at which the surface area is increasing when the volume is $\dfrac{32\pi}{3}\ \text{ft}^{3}$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $4\pi$ \item $2$ \item $4$ \item $1$
+\end{enumerate}
+
+% --- A32
+\item A circular conical reservoir, vertex down, has depth $20$ ft and radius at the top $10$ ft. Water is leaking out so that the surface is falling at the rate of $\tfrac12$ ft/hr. The rate (in ft$^{3}$/hr) at which the water is leaving the reservoir when the water is $8$ ft deep is
+\begin{enumerate}[label=(\Alph*)]
+\item $4\pi$ \item $8\pi$ \item $\dfrac{1}{4\pi}$ \item $\dfrac{1}{8\pi}$
+\end{enumerate}
+
+% --- A33
+\item A local minimum value of the function $y=\dfrac{e^{x}}{x}$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $\dfrac{1}{e}$ \item $1$ \item $-1$ \item $e$
+\end{enumerate}
+
+\end{enumerate}
+
+\textbf{Challenge.}
+
+\begin{enumerate}[label=\textbf{A\arabic*.},resume]
+% --- A34
+\item The area of the largest rectangle that can be drawn with one side along the $x$-axis and two vertices on the curve $y=e^{-x^{2}}$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $\dfrac{\sqrt{2}}{e}$ \item $\sqrt{2e}$ \item $\dfrac{2}{e}$ \item $\dfrac{1}{\sqrt{2}\,e}$
+\end{enumerate}
+
+% --- A35
+\item A line with a negative slope is drawn through the point $(1,2)$ forming a right triangle with the positive $x$- and $y$-axes. The slope of the line forming the triangle of least area is
+\begin{enumerate}[label=(\Alph*)]
+\item $-1$ \item $-2$ \item $-3$ \item $-4$
+\end{enumerate}
+
+% --- A36
+\item The point(s) on the curve $x^{2}-y^{2}=4$ closest to the point $(6,0)$ is (are)
+\begin{enumerate}[label=(\Alph*)]
+\item $(2,0)$ \item $\bigl(\sqrt{5},\pm 1\bigr)$ \item $\bigl(3,\pm\sqrt{5}\bigr)$ \item $\bigl(\sqrt{13},\pm\sqrt{3}\bigr)$
+\end{enumerate}
+
+% --- A37
+\item The sum of the squares of two positive numbers is $200$; their minimum product is
+\begin{enumerate}[label=(\Alph*)]
+\item $100$ \item $20$ \item $0$ \item there is no minimum
+\end{enumerate}
+
+% --- A38
+\item The first-quadrant point on the curve $y^{2}x=18$ that is closest to the point $(2,0)$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $(2,3)$ \item $(6,\sqrt{3})$ \item $(3,\sqrt{6})$ \item $\bigl(1,3\sqrt{2}\bigr)$
+\end{enumerate}
+
+% --- A39
+\item If $h$ is a small negative number, then the local linear approximation for $\sqrt[3]{27+h}$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $3+\dfrac{h}{27}$ \item $3-\dfrac{h}{27}$ \item $\dfrac{h}{27}$ \item $-\dfrac{h}{27}$
+\end{enumerate}
+
+% --- A40
+\item If $f(x)=xe^{-x}$, then at $x=0$
+\begin{enumerate}[label=(\Alph*)]
+\item $f$ is increasing \item $f$ is decreasing \item $f$ has a relative maximum \item $f$ has a relative minimum
+\end{enumerate}
+
+% --- A41
+\item A function $f$ has a derivative for each $x$ such that $|x|<2$ and has a local minimum at $(2,-5)$. Which statement below must be true?
+\begin{enumerate}[label=(\Alph*)]
+\item $f'(2)=0$ \item $f$ exists at $x=2$ \item $f'(x)<0$ if $x<2$, $f'(x)>0$ if $x>2$ \item none of the preceding is necessarily true
+\end{enumerate}
+
+% --- A42
+\item The height of a rectangular box is 10 in. Its length increases at $2$ in./sec; its width decreases at $4$ in./sec. When the length is $8$ in. and the width is $6$ in., the rate (in $\text{in}^{3}/\text{sec}$) at which the volume of the box is changing is
+\begin{enumerate}[label=(\Alph*)]
+\item $200$ \item $80$ \item $-80$ \item $-200$
+\end{enumerate}
+
+% --- A43
+\item The tangent to the curve $x^{3}+x^{2}y+4y=1$ at the point $(3,-2)$ has slope
+\begin{enumerate}[label=(\Alph*)]
+\item $-3$ \item $\dfrac{27}{13}$ \item $\dfrac{11}{9}$ \item $\dfrac{15}{13}$
+\end{enumerate}
+
+% --- A44
+\item If $f(x)=ax^{4}+bx^{2}$ and $ab>0$, then
+\begin{enumerate}[label=(\Alph*)]
+\item the curve has no horizontal tangents
+\item the curve is concave up for all $x$
+\item the curve has no inflection point
+\item none of the preceding is necessarily true
+\end{enumerate}
+
+% --- A45  (tables)
+\item A function $f$ is continuous and differentiable on the interval $[0,4]$, where $f'>0$ but $f''$ is negative. Which table could represent points on $f$?
+\medskip
+
+\begin{tabular}{@{}l@{\quad}c@{\;}c@{\;}c@{\;}c@{\;}c@{}}
+(A) &
+$\begin{array}{c|ccccc}
+x&0&1&2&3&4\\\hline
+y&10&12&14&16&18
+\end{array}$
+&
+\quad (B) &
+$\begin{array}{c|ccccc}
+x&0&1&2&3&4\\\hline
+y&10&12&15&19&24
+\end{array}$
+&
+\quad (C) &
+$\begin{array}{c|ccccc}
+x&0&1&2&3&4\\\hline
+y&10&18&24&28&30
+\end{array}$
+\\[1.2em]
+(D) &
+$\begin{array}{c|ccccc}
+x&0&1&2&3&4\\\hline
+y&10&14&21&24&26
+\end{array}$ &&&&
+\end{tabular}
+
+% --- A46
+\item[*\textbf{A46.}] An equation of the tangent to the curve with parametric equations $x=2t+1$, $y=3-t^{3}$ at the point where $t=1$ is
+\begin{enumerate}[label=(\Alph*)]
+\item $2x+3y=12$ \item $3x+2y=13$ \item $6x+y=20$ \item $3x-2y=5$
+\end{enumerate}
+
+% --- A47
+\item[*\textbf{A47.}] Given $f(x)=\sqrt[3]{x}$ and $f(64)=4$, approximately how much \emph{less} than $4$ is $\sqrt[3]{63}$ using the tangent line?
+\begin{enumerate}[label=(\Alph*)]
+\item $\dfrac{1}{48}$ \item $\dfrac{1}{16}$ \item $\dfrac{1}{3}$ \item $\dfrac{2}{3}$
+\end{enumerate}
+
+% --- A48
+\item The best linear approximation for $f(x)=\tan x$ near $x=\tfrac{\pi}{4}$ is $y=$
+\begin{enumerate}[label=(\Alph*)]
+\item $1+\dfrac12\!\left(x-\tfrac{\pi}{4}\right)$
+\item $1+\left(x-\tfrac{\pi}{4}\right)$
+\item $1+\sqrt{2}\!\left(x-\tfrac{\pi}{4}\right)$
+\item $1+2\!\left(x-\tfrac{\pi}{4}\right)$
+\end{enumerate}
+
+% --- A49
+\item Given $f(x)=e^{kx}$, approximate $f(h)$ (for small $h$) using a tangent-line approximation. $f(h)\approx$
+\begin{enumerate}[label=(\Alph*)]
+\item $k$ \item $kh$ \item $1+k$ \item $1+kh$
+\end{enumerate}
+
+% --- A50 (parabola sketch)
+\item If $f(x)=cx^{2}+dx+e$ for the function shown, then
+\begin{center}
+\begin{tikzpicture}[scale=0.95]
+  \draw[->] (-0.5,0) -- (5.2,0) node[right] {$x$};
+  \draw[->] (0,-1.2) -- (0,3.0) node[above] {$y$};
+  \draw[domain=-0.1:4.6, smooth, very thick] plot (\x,{2.2 - 0.25*(\x+0.4)^2});
+  \node at (3.8,2.3) {$f(x)$};
+\end{tikzpicture}
+\end{center}
+\begin{enumerate}[label=(\Alph*)]
+\item $c,d,e$ are all positive
+\item $c>0,\ d<0,\ e>0$
+\item $c<0,\ d>0,\ e>0$
+\item $c<0,\ d<0,\ e>0$
+\end{enumerate}
+
+% --- A51
+\item Given $f(x)=\log_{10}x$ and $\log_{10}(102)\approx 2.0086$, which is closest to $f'(100)$?
+\begin{enumerate}[label=(\Alph*)]
+\item $0.0043$ \item $0.0086$ \item $0.01$ \item $1.0043$
+\end{enumerate}
+
+\end{enumerate}
+
+\end{document}
+
