@@ -8,7 +8,12 @@
     body { font-family: system-ui, -apple-system, Arial; max-width: 420px; margin: 60px auto; }
     .err { color:#c00; }
     input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:8px; }
-    button { margin-top:12px; padding:10px 14px; border:1px solid #ccc; border-radius:10px; cursor:pointer; }
+    button, .btn {
+      display:inline-block; margin-top:12px; padding:10px 14px;
+      border:1px solid #ccc; border-radius:10px; cursor:pointer; text-decoration:none; color:#000;
+      background:#f6f6f6;
+    }
+    .inline { margin-left:10px; }
     a { color:#06c; }
   </style>
 </head>
@@ -20,19 +25,35 @@
 
   <form method="post" action="{% url 'login' %}">
     {% csrf_token %}
+
+    {# keep ?next=... so users return to where they came from #}
+    {% if request.GET.next %}
+      <input type="hidden" name="next" value="{{ request.GET.next }}">
+    {% endif %}
+
     <div style="margin-bottom:10px;">
       <label for="{{ form.username.id_for_label }}">Username</label><br>
       {{ form.username }}
+      {% for e in form.username.errors %}<div class="err">{{ e }}</div>{% endfor %}
     </div>
     <div>
       <label for="{{ form.password.id_for_label }}">Password</label><br>
       {{ form.password }}
+      {% for e in form.password.errors %}<div class="err">{{ e }}</div>{% endfor %}
     </div>
-    <button>Sign in</button>
+
+    <button type="submit">Sign in</button>
+    <a class="btn inline" href="{% url 'password_reset' %}">Forgot password?</a>
   </form>
 
   <p style="margin-top:12px;">
     New here? <a href="{% url 'register' %}">Create an account</a>
   </p>
+
+  <!-- Admin login button/link -->
+  <p style="margin-top:8px;">
+    <a href="{% url 'admin:index' %}" class="btn">Admin login</a>
+  </p>
 </body>
 </html>
+
