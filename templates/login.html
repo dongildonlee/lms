@@ -40,6 +40,11 @@
   <p class="text-sm text-gray-600 mt-3">
     New here? <a class="text-brand underline" href="{% url 'register' %}">Create an account</a>
   </p>
+
+  {# NEW: admin link #}
+  <p class="text-sm mt-2">
+    <a href="{% url 'admin:index' %}" class="text-brand underline">Admin login</a>
+  </p>
 </div>
 {% endblock %}
 
@@ -49,5 +54,6 @@
   if (u) u.focus();
 </script>
 {% endblock %}
+
 
 
