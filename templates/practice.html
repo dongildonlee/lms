@@ -2,7 +2,9 @@
 {% block title %}Practice | Wrong-Answer Packets{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-semibold mb-4">Student Practice</h1>
+<h1 class="text-2xl font-semibold mb-4">
+  Practice <span id="subjectLabel" class="text-gray-500 text-lg"></span>
+</h1>
 
 <!-- MathJax layout overrides scoped to this page -->
 <style>
@@ -24,26 +26,17 @@
   }
 </style>
 
-<div class="bg-white shadow rounded-lg p-4 mb-4">
-  <div class="flex flex-wrap items-center gap-3">
-    <div class="text-sm text-gray-600">Student ID: <strong>{{ me_sid }}</strong></div>
-    <label class="ml-auto text-sm">Tag (optional)</label>
-    <input id="tag" class="border rounded px-3 py-2" placeholder="e.g. Calculus" />
-    <button id="startBtn" class="bg-brand text-white px-4 py-2 rounded">Start Practice</button>
-    <a class="text-brand underline" href="/teacher/" target="_blank">Open Teacher View</a>
-  </div>
-  <div id="status" class="mt-2 text-gray-600"></div>
-</div>
-
-<div id="qCard" class="bg-white shadow rounded-lg p-4 hidden" data-v="practice-v4">
-  <div class="text-xs text-gray-500 mb-2">practice template v4</div>
+<div id="qCard" class="bg-white shadow rounded-lg p-4 hidden">
   <div id="stem" class="text-lg mb-3 whitespace-normal leading-7"></div>
   <div id="choices"></div>
   <div id="feedback" class="mt-3 font-semibold"></div>
-  <div class="mt-4">
+  <div class="mt-4 flex gap-3">
     <button id="nextBtn" class="border px-4 py-2 rounded">Next ▶</button>
+    <a href="/dashboard/" class="text-brand underline">Back to Dashboard</a>
   </div>
 </div>
+
+<div id="status" class="mt-4 text-gray-600"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -51,6 +44,12 @@
 const $ = (sel) => document.querySelector(sel);
 let attemptId = null;
 let currentQ = null;
+
+/* Read a query parameter from the URL */
+function qp(name) {
+  const m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+}
 
 /* Normalize TeX-ish text so sentences don’t break every word. */
 function normalizeTex(s) {
@@ -90,31 +89,35 @@ async function typeset() {
 }
 
 async function startPractice() {
+  const tag = qp('tag');
+  if (!tag) {            // no subject → go to dashboard
+    location.href = '/dashboard/';
+    return;
+  }
+  $('#subjectLabel').textContent = '— ' + tag;
+
   try {
     const data = await api('/api/attempts/', {
       method: 'POST',
       body: JSON.stringify({ assignment_title: 'Practice' })
     });
     attemptId = data.attempt_id;
-    $('#status').textContent = `Attempt #${attemptId} started.`;
-    await loadQuestion();
+    await loadQuestion(tag);
   } catch (err) {
     $('#status').textContent = `Failed to start: ${err.message}`;
   }
 }
 
-async function loadQuestion() {
+async function loadQuestion(tag) {
   $('#qCard').classList.remove('hidden'); // show card so Next is visible
   try {
-    const tag = $('#tag').value.trim();
-    const url = `/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`;
-    const qRes = await api(url);
+    const qRes = await api(`/api/questions/?limit=1&tag=${encodeURIComponent(tag)}`);
 
     if (!qRes.count) {
-      $('#stem').innerHTML = 'No questions found. Add some in <code>/admin</code> or clear the tag.';
+      $('#stem').innerHTML = `No questions found for <strong>${tag}</strong>.`;
       $('#choices').innerHTML = '';
       $('#feedback').textContent = '';
-      $('#status').textContent = 'No questions found.';
+      $('#status').textContent = '';
       await typeset();
       return;
     }
@@ -163,10 +166,11 @@ async function submitAnswer(choiceKey) {
   }
 }
 
-$('#startBtn').addEventListener('click', startPractice);
-$('#nextBtn').addEventListener('click', loadQuestion);
+$('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
+document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 {% endblock %}
+
 
 
 

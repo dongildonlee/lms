@@ -200,13 +200,26 @@ def _normalize_tex(s: str) -> str:
     s = re.sub(r'\s{2,}', ' ', s)                     # collapse multi-spaces
     return s.strip()
 
+def _descendant_tags_by_name(name: str):
+    """Return Tag queryset including the tag named `name` and all its descendants."""
+    try:
+        root = Tag.objects.get(name__iexact=name)
+    except Tag.DoesNotExist:
+        return Tag.objects.none()
+
+    ids = [root.id]
+    stack = [root]
+    while stack:
+        t = stack.pop()
+        children = list(Tag.objects.filter(parent=t))
+        ids.extend(ch.id for ch in children)
+        stack.extend(children)
+    return Tag.objects.filter(id__in=ids)
+
 
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def get_questions(request):
-    """
-    Returns {count, questions:[{id,type,stem_md,choices,version,tags:[...]}]}
-    """
     try:
         tag = request.query_params.get("tag", "").strip()
         try:
@@ -216,30 +229,33 @@ def get_questions(request):
 
         qs = Question.objects.all()
 
-        # Identify the student
-        student = getattr(request.user, "studentprofile", None)
+        # Student subjects (optional restriction)
+        sp = getattr(request.user, "studentprofile", None)
+        subjects_qs = sp.subjects.all() if sp and sp.subjects.exists() else None
 
         if tag:
-            # If a tag is provided and the student has assigned subjects, enforce access
-            if student and student.subjects.exists():
-                qs = qs.filter(tags__name__iexact=tag, tags__in=student.subjects.all())
-            else:
-                qs = qs.filter(tags__name__iexact=tag)
+            allowed_tags = _descendant_tags_by_name(tag)
+            if subjects_qs is not None:
+                # intersect with student's allowed subjects (parent or child)
+                allowed_ids = list(allowed_tags.values_list("id", flat=True))
+                subject_ids = list(subjects_qs.values_list("id", flat=True))
+                if not set(allowed_ids) & set(subject_ids):
+                    # not allowed: return no questions
+                    return Response({"count": 0, "questions": []})
+            qs = qs.filter(tags__in=allowed_tags).distinct()
         else:
-            # No tag provided: if the student has assigned subjects, restrict to them
-            if student and student.subjects.exists():
-                qs = qs.filter(tags__in=student.subjects.all()).distinct()
+            # No tag given: restrict to student's subjects if they have any
+            if subjects_qs is not None:
+                qs = qs.filter(tags__in=subjects_qs).distinct()
 
-        # Random question(s)
         qs = qs.order_by(Random())[:max(1, limit)]
 
         def _norm(s: str) -> str:
-            if not s:
-                return ""
-            s = re.sub(r'<br\s*/?>', ' ', s, flags=re.I)
-            s = re.sub(r'\\\\(?!\[|\(|\{)', ' ', s)   # \\ -> space (keep \\\[, \\\(, \\\{)
-            s = re.sub(r'\s*\n+\s*', ' ', s)          # collapse newlines
-            s = re.sub(r'\s{2,}', ' ', s)             # collapse runs of spaces
+            if not s: return ""
+            s = re.sub(r'<br\s*/?>',' ', s, flags=re.I)
+            s = re.sub(r'\\\\(?!\[|\(|\{)',' ', s)
+            s = re.sub(r'\s*\n+\s*',' ', s)
+            s = re.sub(r'\s{2,}',' ', s)
             return s.strip()
 
         out = []
@@ -351,11 +367,29 @@ def wrong_questions_pdf(request, student_id: int):
 
 @login_required
 def student_dashboard(request):
-    student = getattr(request.user, "studentprofile", None)
-    if student and student.subjects.exists():
-        subjects = list(student.subjects.order_by("name").values_list("name", flat=True))
-    else:
-        # If nothing assigned yet, show all tags so they can still practice
-        subjects = list(Tag.objects.order_by("name").values_list("name", flat=True))
-    me_sid = student.sid if student else ""
-    return render(request, "dashboard.html", {"subjects": subjects, "me_sid": me_sid})
+    sp = getattr(request.user, "studentprofile", None)
+
+    # Allowed tags: student's assigned subjects, or all tags if none assigned yet
+    allowed = sp.subjects.all() if sp and sp.subjects.exists() else Tag.objects.all()
+
+    # Build groups: { parent_name: [child_name, ...] }
+    groups_map = {}
+    for t in allowed:
+        if t.parent is None:
+            groups_map.setdefault(t.name, [])
+        else:
+            groups_map.setdefault(t.parent.name, [])
+            if t.name not in groups_map[t.parent.name]:
+                groups_map[t.parent.name].append(t.name)
+
+    # Turn into a list of {parent, children[]}, sorted
+    groups = []
+    for parent in sorted(groups_map.keys(), key=str.lower):
+        children = sorted(groups_map[parent], key=str.lower)
+        groups.append({"parent": parent, "children": children})
+
+    return render(
+        request,
+        "dashboard.html",
+        {"groups": groups, "me_sid": getattr(sp, "sid", "")},
+    )

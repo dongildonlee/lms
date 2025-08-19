@@ -160,7 +160,7 @@ STORAGES = {
 # Auth redirects
 # ------------------------------------------------------------
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "/practice/"
+LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # ------------------------------------------------------------

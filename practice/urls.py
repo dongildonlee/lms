@@ -22,7 +22,7 @@ urlpatterns = [
     #path("api/test-pdf-plain", views.test_pdf_plain, name="test_pdf_plain"),
 
     # Pages
-    path("practice/", views.practice_page, name="practice_page"),
+    path("practice/", views.practice_page, name="practice"),
     path("teacher/", views.teacher_page, name="teacher_page"),
 
     # Signup page

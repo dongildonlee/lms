@@ -21,7 +21,7 @@ from django.views.generic import RedirectView
 
 urlpatterns = [
     # Root → /practice/  (put this FIRST so / redirects correctly)
-    path("", RedirectView.as_view(url="/practice/", permanent=False)),
+    path("", RedirectView.as_view(url="/dashboard/", permanent=False)),
 
     # Your app's URLs (practice/, teacher/, api/…)
     path("", include("practice.urls")),
