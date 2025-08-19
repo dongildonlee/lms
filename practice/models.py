@@ -76,6 +76,8 @@ class StudentProfile(models.Model):
     grade = models.CharField(max_length=20, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    subjects = models.ManyToManyField("Tag", blank=True, related_name="students")
+
     def __str__(self):
         return f"{self.user.username} ({self.sid or self.user.id})"
 
