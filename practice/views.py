@@ -348,4 +348,14 @@ def wrong_questions_pdf(request, student_id: int):
     resp["Content-Disposition"] = f'inline; filename="still_missed_student_{student_id}.pdf"'
     return resp
 
-    
+
+@login_required
+def student_dashboard(request):
+    student = getattr(request.user, "studentprofile", None)
+    if student and student.subjects.exists():
+        subjects = list(student.subjects.order_by("name").values_list("name", flat=True))
+    else:
+        # If nothing assigned yet, show all tags so they can still practice
+        subjects = list(Tag.objects.order_by("name").values_list("name", flat=True))
+    me_sid = student.sid if student else ""
+    return render(request, "dashboard.html", {"subjects": subjects, "me_sid": me_sid})

@@ -2,6 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("", views.practice_page, name="practice"),
+    path("dashboard/", views.student_dashboard, name="student_dashboard"),
+
     # API: health & questions
     path("api/ping", views.ping, name="ping"),
     path("api/questions/", views.get_questions, name="get_questions"),
