@@ -1,8 +1,7 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import User
-
-from .models import Classroom, Enrollment, Tag, Question, Attempt, AttemptItem, StudentProfile
+from .models import (
+    Tag, StudentProfile, Classroom, Enrollment, Question, Attempt, AttemptItem
+)
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
@@ -13,28 +12,33 @@ class TagAdmin(admin.ModelAdmin):
 class StudentProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "sid", "grade")
     search_fields = ("sid", "user__username", "user__email")
-    filter_horizontal = ("subjects",)  # nice dual-list UI to pick subjects
-    
-# Inline profile on the User page for convenience
-class StudentProfileInline(admin.StackedInline):
-    model = StudentProfile
-    can_delete = False
+    filter_horizontal = ("subjects",)
 
+@admin.register(Classroom)
+class ClassroomAdmin(admin.ModelAdmin):
+    list_display = ("name", "owner")
+    search_fields = ("name", "owner__username")
 
-class UserAdmin(BaseUserAdmin):
-    inlines = [StudentProfileInline]
+@admin.register(Enrollment)
+class EnrollmentAdmin(admin.ModelAdmin):
+    list_display = ("classroom", "student")
+    search_fields = ("classroom__name", "student__username")
 
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ("id", "type", "version", "created_by", "created_at")
+    list_filter = ("type", "tags")
+    search_fields = ("stem_md",)
 
-# Replace default User admin with one that shows the inline
-admin.site.unregister(User)
-admin.site.register(User, UserAdmin)
+@admin.register(Attempt)
+class AttemptAdmin(admin.ModelAdmin):
+    list_display = ("id", "student", "assignment_title", "started_at", "completed_at")
+    search_fields = ("student__username", "assignment_title")
 
-# Your app models
-admin.site.register(Classroom)
-admin.site.register(Enrollment)
-admin.site.register(Tag)
-admin.site.register(Question)
-admin.site.register(Attempt)
-admin.site.register(AttemptItem)
+@admin.register(AttemptItem)
+class AttemptItemAdmin(admin.ModelAdmin):
+    list_display = ("id", "attempt", "student", "question", "is_correct", "created_at")
+    list_filter = ("is_correct",)
+
 
 
