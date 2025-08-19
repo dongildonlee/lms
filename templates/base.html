@@ -5,87 +5,93 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Wrong-Answer Packets{% endblock %}</title>
 
-  <!-- Inter font -->
+  <!-- Inter font + Tailwind (no build step) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <!-- Tailwind (CDN, no build step) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          colors: {
-            brand: '#2563eb',            // primary
-            brandDark: '#1d4ed8',        // primary:hover
-            ink: '#0f172a',              // headings
-            body: '#0b1220',             // text
-          },
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] }
+          colors: { brand:'#2563eb', brandDark:'#1d4ed8', ink:'#0f172a' },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] }
         }
       }
     }
   </script>
 
-  <!-- Global UI tokens (works with Tailwind CDN) -->
+  <!-- Global tokens + background container styles -->
   <style>
     :root{
       --brand:#2563eb; --brand-dark:#1d4ed8;
-      --bg:#f8fafc; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
-      --ring: rgba(37, 99, 235, .35);
+      --bg:#0b1020; /* dark base so space looks right under translucency */
     }
-    html, body { scroll-behavior: smooth; }
-    body { background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.08), transparent 60%),
-      radial-gradient(900px 450px at -10% 20%, rgba(14,165,233,.06), transparent 55%),
-      var(--bg);
-      color: var(--body);
+    html,body { height:100%; }
+    body { font-family: Inter, ui-sans-serif, system-ui; background: var(--bg); }
+
+    /* ===== 3D background layer ===== */
+    #moon-wrap{
+      position: fixed; inset: 0;
+      z-index: 0;           /* content will sit above this */
+      pointer-events: none; /* never capture clicks */
+      overflow: hidden;
+    }
+    #bg3d{
+      width:100%; height:100%;
+      display:block;
+    }
+    /* soft gradient veil so content reads well */
+    #veil{
+      position:absolute; inset:0; pointer-events:none;
+      background:
+        radial-gradient(70% 60% at 80% 10%, rgba(37,99,235,.12), transparent 55%),
+        linear-gradient(to bottom, rgba(2,6,23,.35), rgba(2,6,23,.65));
+      z-index:1;
     }
 
-    /* Components */
+    /* fallback starfield when WebGL off / motion reduced */
+    .no-webgl #moon-wrap, .reduced-motion #moon-wrap { background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%),
+      url('https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?q=80&w=1920&auto=format&fit=crop') center/cover no-repeat;
+    }
+    .no-webgl #bg3d, .reduced-motion #bg3d { display:none; }
+
+    /* ---- UI primitives (buttons) ---- */
     .btn { display:inline-flex; align-items:center; justify-content:center;
            gap:.5rem; padding:.6rem 1rem; border-radius:.75rem; font-weight:600;
            transition:all .15s ease; border:1px solid transparent; }
-    .btn:focus { outline: none; box-shadow: 0 0 0 4px var(--ring); }
-    .btn-primary { background: var(--brand); color:#fff; }
-    .btn-primary:hover { background: var(--brand-dark); }
-    .btn-outline { background:#fff; border-color:#e5e7eb; color:var(--ink); }
+    .btn-primary { background:var(--brand); color:#fff; }
+    .btn-primary:hover { background:var(--brand-dark); }
+    .btn-outline { background:#ffffffcc; border-color:#e5e7eb; color:#0f172a; backdrop-filter: blur(6px); }
     .btn-outline:hover { border-color:var(--brand); color:var(--brand); }
 
-    .input { width:100%; padding:.6rem .8rem; border:1px solid #e5e7eb; border-radius:.75rem; }
-    .input:focus { outline:none; border-color: var(--brand); box-shadow:0 0 0 4px var(--ring); }
-
-    .chip { display:inline-flex; align-items:center; gap:.25rem;
-            padding:.3rem .6rem; border:1px solid #e5e7eb; border-radius:999px;
-            background:#fff; color:#0f172a; font-size:.85rem; }
-    .chip:hover { border-color: var(--brand); color: var(--brand); }
-
-    .card { background: var(--card); border:1px solid #e5e7eb;
-            border-radius:1rem; box-shadow: 0 6px 16px rgba(2,6,23,.06); }
-
-    .brand-text { background: linear-gradient(90deg, var(--brand) 0%, #14b8a6 100%);
-                  -webkit-background-clip: text; background-clip:text; color:transparent; }
+    /* keep main content above background */
+    header, main, footer { position: relative; z-index: 10; }
   </style>
 
   <!-- MathJax (kept for practice/teacher pages) -->
   <script>
     window.MathJax = { tex:{inlineMath:[['$','$'],['\\(','\\)']]}, svg:{fontCache:'global'} };
   </script>
-  <script id="MathJax-script" async
-          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
   {% block head %}{% endblock %}
 </head>
-<body class="min-h-screen font-sans">
+<body class="">
+  <!-- 3D Moon background (behind everything) -->
+  <div id="moon-wrap" aria-hidden="true">
+    <canvas id="bg3d"></canvas>
+    <div id="veil"></div>
+  </div>
 
   <!-- Sticky header -->
-  <header class="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
+  <header class="sticky top-0 z-30 backdrop-blur bg-white/70 border-b">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
       {% if user.is_authenticated %}
-        <a href="/dashboard/" class="font-semibold text-xl brand-text">Wrong-Answer Packets</a>
+        <a href="/dashboard/" class="font-semibold text-xl text-white drop-shadow">Wrong-Answer Packets</a>
       {% else %}
-        <a href="/" class="font-semibold text-xl brand-text">Wrong-Answer Packets</a>
+        <a href="/" class="font-semibold text-xl text-white drop-shadow">Wrong-Answer Packets</a>
       {% endif %}
 
       <nav class="ml-auto flex items-center gap-3 text-sm">
@@ -93,8 +99,7 @@
           <a class="btn btn-outline" href="/dashboard/">Dashboard</a>
           <a class="btn btn-outline" href="/practice/">Practice</a>
           <a class="btn btn-outline" href="/teacher/">Teacher</a>
-          <form method="post" action="{% url 'logout' %}" class="inline">
-            {% csrf_token %}
+          <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}
             <button class="btn btn-primary">Log out</button>
           </form>
         {% else %}
@@ -106,17 +111,112 @@
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-10">
+  <main class="max-w-6xl mx-auto px-4 py-10 text-white">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="text-center text-sm text-gray-500 py-10">
+  <footer class="text-center text-sm text-slate-300 py-10">
     © {{ now|date:"Y" }} Wrong-Answer Packets
   </footer>
 
   {% block scripts %}{% endblock %}
+
+  <!-- three.js (global build; no bundler needed) -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script>
+    (function () {
+      // Respect user preference
+      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReduced) document.body.classList.add('reduced-motion');
+
+      const hasWebGL = !!(window.WebGLRenderingContext);
+      if (!hasWebGL || prefersReduced) { document.body.classList.add('no-webgl'); return; }
+
+      const canvas = document.getElementById('bg3d');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 1000);
+      camera.position.set(0, 0, 130);
+
+      // Lights
+      const key = new THREE.DirectionalLight(0xffffff, 1.0);
+      key.position.set(2, 1, 2);
+      scene.add(key);
+      scene.add(new THREE.AmbientLight(0x555555));
+
+      // Moon
+      const R = 50;
+      const geo = new THREE.SphereGeometry(R, 64, 64);
+      const texLoader = new THREE.TextureLoader();
+
+      const moonTex = texLoader.load('https://threejs.org/examples/textures/planets/moon_1024.jpg');
+      const moonBump = texLoader.load('https://threejs.org/examples/textures/planets/moon_1024.jpg'); // simple reuse
+
+      const mat = new THREE.MeshPhongMaterial({
+        map: moonTex,
+        bumpMap: moonBump,
+        bumpScale: 0.5
+      });
+      const moon = new THREE.Mesh(geo, mat);
+      scene.add(moon);
+
+      // Red pin (set your own lat/lon below)
+      const pin = new THREE.Group();
+      const pinStem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.3, 6, 12),
+        new THREE.MeshBasicMaterial({ color: 0xff2d55 })
+      );
+      pinStem.position.y = 3;
+      const pinHead = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0xff2d55 })
+      );
+      pin.add(pinStem);
+      pin.add(pinHead);
+      scene.add(pin);
+
+      // Convert lat/lon to a position on the sphere surface
+      function latLonToVec3(latDeg, lonDeg, radius) {
+        const lat = THREE.MathUtils.degToRad(latDeg);
+        const lon = THREE.MathUtils.degToRad(lonDeg);
+        const x = radius * Math.cos(lat) * Math.cos(lon);
+        const y = radius * Math.sin(lat);
+        const z = radius * Math.cos(lat) * Math.sin(lon);
+        return new THREE.Vector3(x, y, z);
+      }
+
+      // Example: put the pin at (lat, lon) = (20°, -45°)
+      const pinPos = latLonToVec3(20, -45, R * 1.05); // slightly above surface
+      pin.position.copy(pinPos);
+      pin.lookAt(new THREE.Vector3(0,0,0)); // orient toward center
+      pin.rotateX(Math.PI/2);               // make stem stand up from surface
+
+      // Resize
+      function resize() {
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      // Animate
+      function tick() {
+        moon.rotation.y += 0.0016;         // spin
+        // keep pin "stuck" to the rotating surface (rotate in opposite space)
+        pin.rotateOnWorldAxis(new THREE.Vector3(0,1,0), 0.0016);
+        renderer.render(scene, camera);
+        requestAnimationFrame(tick);
+      }
+      tick();
+    })();
+  </script>
 </body>
 </html>
+
 
 
 

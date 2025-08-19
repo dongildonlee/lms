@@ -19,3 +19,7 @@ node_modules/
 
 # Env files (never commit secrets)
 .env
+
+# local-only
+requirements-local.txt
+seed.json
