@@ -5,13 +5,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Wrong-Answer Packets{% endblock %}</title>
 
-  <!-- Tailwind (CDN, zero build step) -->
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind (CDN, no build step) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { theme: { extend: { colors: { brand:'#2563eb' }}}}
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#2563eb',            // primary
+            brandDark: '#1d4ed8',        // primary:hover
+            ink: '#0f172a',              // headings
+            body: '#0b1220',             // text
+          },
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] }
+        }
+      }
+    }
   </script>
 
-  <!-- MathJax for TeX on practice/teacher pages -->
+  <!-- Global UI tokens (works with Tailwind CDN) -->
+  <style>
+    :root{
+      --brand:#2563eb; --brand-dark:#1d4ed8;
+      --bg:#f8fafc; --card:#ffffff; --ink:#0f172a; --muted:#64748b;
+      --ring: rgba(37, 99, 235, .35);
+    }
+    html, body { scroll-behavior: smooth; }
+    body { background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.08), transparent 60%),
+      radial-gradient(900px 450px at -10% 20%, rgba(14,165,233,.06), transparent 55%),
+      var(--bg);
+      color: var(--body);
+    }
+
+    /* Components */
+    .btn { display:inline-flex; align-items:center; justify-content:center;
+           gap:.5rem; padding:.6rem 1rem; border-radius:.75rem; font-weight:600;
+           transition:all .15s ease; border:1px solid transparent; }
+    .btn:focus { outline: none; box-shadow: 0 0 0 4px var(--ring); }
+    .btn-primary { background: var(--brand); color:#fff; }
+    .btn-primary:hover { background: var(--brand-dark); }
+    .btn-outline { background:#fff; border-color:#e5e7eb; color:var(--ink); }
+    .btn-outline:hover { border-color:var(--brand); color:var(--brand); }
+
+    .input { width:100%; padding:.6rem .8rem; border:1px solid #e5e7eb; border-radius:.75rem; }
+    .input:focus { outline:none; border-color: var(--brand); box-shadow:0 0 0 4px var(--ring); }
+
+    .chip { display:inline-flex; align-items:center; gap:.25rem;
+            padding:.3rem .6rem; border:1px solid #e5e7eb; border-radius:999px;
+            background:#fff; color:#0f172a; font-size:.85rem; }
+    .chip:hover { border-color: var(--brand); color: var(--brand); }
+
+    .card { background: var(--card); border:1px solid #e5e7eb;
+            border-radius:1rem; box-shadow: 0 6px 16px rgba(2,6,23,.06); }
+
+    .brand-text { background: linear-gradient(90deg, var(--brand) 0%, #14b8a6 100%);
+                  -webkit-background-clip: text; background-clip:text; color:transparent; }
+  </style>
+
+  <!-- MathJax (kept for practice/teacher pages) -->
   <script>
     window.MathJax = { tex:{inlineMath:[['$','$'],['\\(','\\)']]}, svg:{fontCache:'global'} };
   </script>
@@ -20,47 +77,46 @@
 
   {% block head %}{% endblock %}
 </head>
-<body class="bg-gray-50 min-h-screen">
-  <header class="bg-white border-b">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
-      <!-- Brand: send signed-in users to dashboard -->
+<body class="min-h-screen font-sans">
+
+  <!-- Sticky header -->
+  <header class="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
       {% if user.is_authenticated %}
-        <a href="/dashboard/" class="font-semibold text-lg">Wrong-Answer Packets</a>
+        <a href="/dashboard/" class="font-semibold text-xl brand-text">Wrong-Answer Packets</a>
       {% else %}
-        <a href="/" class="font-semibold text-lg">Wrong-Answer Packets</a>
+        <a href="/" class="font-semibold text-xl brand-text">Wrong-Answer Packets</a>
       {% endif %}
 
-      <nav class="ml-auto flex items-center gap-4 text-sm">
+      <nav class="ml-auto flex items-center gap-3 text-sm">
         {% if user.is_authenticated %}
-          <a class="hover:text-brand" href="/dashboard/">Dashboard</a>
-          <a class="hover:text-brand" href="/practice/">Practice</a>
-          {# If you prefer Teacher only for staff, wrap with {% if user.is_staff %} ... {% endif %} #}
-          <a class="hover:text-brand" href="/teacher/">Teacher</a>
-
-          <span class="text-gray-600">Hi, {{ user.username }}</span>
+          <a class="btn btn-outline" href="/dashboard/">Dashboard</a>
+          <a class="btn btn-outline" href="/practice/">Practice</a>
+          <a class="btn btn-outline" href="/teacher/">Teacher</a>
           <form method="post" action="{% url 'logout' %}" class="inline">
             {% csrf_token %}
-            <button class="text-brand underline">Log out</button>
+            <button class="btn btn-primary">Log out</button>
           </form>
         {% else %}
-          <a class="hover:text-brand" href="/practice/">Practice</a>
-          <a class="text-brand underline" href="{% url 'login' %}">Sign in</a>
-          <a class="text-brand underline" href="{% url 'register' %}">Sign up</a>
+          <a class="btn btn-outline" href="/practice/">Try Practice</a>
+          <a class="btn btn-primary" href="{% url 'login' %}">Sign in</a>
+          <a class="btn btn-outline" href="{% url 'register' %}">Sign up</a>
         {% endif %}
       </nav>
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-8">
+  <main class="max-w-6xl mx-auto px-4 py-10">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="text-center text-sm text-gray-500 py-8">
+  <footer class="text-center text-sm text-gray-500 py-10">
     © {{ now|date:"Y" }} Wrong-Answer Packets
   </footer>
 
   {% block scripts %}{% endblock %}
 </body>
 </html>
+
 
 

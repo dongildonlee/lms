@@ -2,37 +2,34 @@
 {% block title %}Practice | Wrong-Answer Packets{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-semibold mb-4">
+<h1 class="text-3xl font-semibold mb-6">
   Practice <span id="subjectLabel" class="text-gray-500 text-lg"></span>
 </h1>
 
-<!-- MathJax layout overrides scoped to this page -->
+<!-- MathJax layout tweaks (keep inline so it only applies here) -->
 <style>
-  /* Make sure math renders inline and doesn’t stack tokens vertically */
   #qCard mjx-container { line-height: 1.6; }
-  #qCard mjx-container[display="true"] { display: block; margin: 0.5rem 0; }
-  #qCard mjx-container:not([display="true"]) { display: inline; }
-  /* Force MathJax internal tags to behave inline */
-  #qCard mjx-container mjx-math,
-  #qCard mjx-container mjx-mrow,
-  #qCard mjx-container mjx-mi,
-  #qCard mjx-container mjx-mo,
-  #qCard mjx-container mjx-mn,
-  #qCard mjx-container mjx-msup,
-  #qCard mjx-container mjx-msub,
-  #qCard mjx-container * {
-    display: inline !important;
-    white-space: normal !important;
-  }
+  #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
+  #qCard mjx-container:not([display="true"]) { display:inline; }
+  #qCard mjx-container * { display:inline !important; white-space:normal !important; }
 </style>
 
-<div id="qCard" class="bg-white shadow rounded-lg p-4 hidden">
-  <div id="stem" class="text-lg mb-3 whitespace-normal leading-7"></div>
-  <div id="choices"></div>
-  <div id="feedback" class="mt-3 font-semibold"></div>
-  <div class="mt-4 flex gap-3">
-    <button id="nextBtn" class="border px-4 py-2 rounded">Next ▶</button>
-    <a href="/dashboard/" class="text-brand underline">Back to Dashboard</a>
+<div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
+  <div id="stem" class="text-lg mb-4 whitespace-normal leading-7"></div>
+
+  <div id="choices" class="space-y-2"></div>
+
+  <div id="feedback" class="mt-4 font-semibold"></div>
+
+  <div class="mt-6 flex items-center gap-3">
+    <button id="nextBtn"
+            class="inline-flex items-center justify-center px-4 py-2 rounded-xl border border-gray-200 hover:border-blue-600 hover:text-blue-600 transition">
+      Next ▶
+    </button>
+    <a href="/dashboard/"
+       class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition">
+      Back to Dashboard
+    </a>
   </div>
 </div>
 
@@ -42,127 +39,100 @@
 {% block scripts %}
 <script>
 const $ = (sel) => document.querySelector(sel);
-let attemptId = null;
-let currentQ = null;
+let attemptId = null, currentQ = null;
 
-/* Read a query parameter from the URL */
-function qp(name) {
+function qp(name){
   const m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
-  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+  return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
 }
 
-/* Normalize TeX-ish text so sentences don’t break every word. */
-function normalizeTex(s) {
-  if (!s) return '';
-  return s
-    .replace(/<br\s*\/?>/gi, ' ')          // HTML <br> -> space
-    .replace(/\\\\(?!\[|\(|\{)/g, ' ')     // TeX \\ -> space (keep \\\[, \\\(, \\\{)
-    .replace(/\s*\n+\s*/g, ' ')            // collapse newlines
-    .replace(/\s{2,}/g, ' ')               // collapse multiple spaces
-    .trim();
+function normalizeTex(s){
+  if(!s) return '';
+  return s.replace(/<br\s*\/?>/gi,' ')
+          .replace(/\\\\(?!\[|\(|\{)/g,' ')
+          .replace(/\s*\n+\s*/g,' ')
+          .replace(/\s{2,}/g,' ')
+          .trim();
 }
 
-// CSRF cookie helper
-function getCookie(name) {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
+function getCookie(name){
+  const v = `; ${document.cookie}`.split(`; ${name}=`);
+  return v.length === 2 ? v.pop().split(';').shift() : undefined;
 }
 const csrftoken = getCookie('csrftoken');
 
-// Fetch helper
-async function api(url, opts = {}) {
-  const o = Object.assign({ headers: {} }, opts);
-  if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
-  if (opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
+async function api(url, opts={}){
+  const o = Object.assign({ headers:{} }, opts);
+  if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
+  if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
   const res = await fetch(url, o);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-// Typeset only the card for speed
-async function typeset() {
+async function typeset(){
   const card = $('#qCard');
-  if (window.MathJax && MathJax.typesetPromise && card) {
-    await MathJax.typesetPromise([card]);
-  }
+  if(window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
 }
 
-async function startPractice() {
+async function startPractice(){
   const tag = qp('tag');
-  if (!tag) {            // no subject → go to dashboard
-    location.href = '/dashboard/';
-    return;
-  }
+  if(!tag){ location.href = '/dashboard/'; return; }
   $('#subjectLabel').textContent = '— ' + tag;
 
-  try {
-    const data = await api('/api/attempts/', {
-      method: 'POST',
-      body: JSON.stringify({ assignment_title: 'Practice' })
-    });
+  try{
+    const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
     attemptId = data.attempt_id;
     await loadQuestion(tag);
-  } catch (err) {
+  }catch(err){
     $('#status').textContent = `Failed to start: ${err.message}`;
   }
 }
 
-async function loadQuestion(tag) {
-  $('#qCard').classList.remove('hidden'); // show card so Next is visible
-  try {
+async function loadQuestion(tag){
+  $('#qCard').classList.remove('hidden');
+  try{
     const qRes = await api(`/api/questions/?limit=1&tag=${encodeURIComponent(tag)}`);
-
-    if (!qRes.count) {
+    if(!qRes.count){
       $('#stem').innerHTML = `No questions found for <strong>${tag}</strong>.`;
-      $('#choices').innerHTML = '';
-      $('#feedback').textContent = '';
-      $('#status').textContent = '';
-      await typeset();
-      return;
+      $('#choices').innerHTML = ''; $('#feedback').textContent=''; $('#status').textContent='';
+      await typeset(); return;
     }
 
     currentQ = qRes.questions[0];
-
-    // Stem (normalized)
     $('#stem').innerHTML = normalizeTex(currentQ.stem_md);
 
-    // Choices
-    const choicesDiv = $('#choices');
-    choicesDiv.innerHTML = '';
+    const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
     const choices = currentQ.choices || {};
-    for (const [key, label] of Object.entries(choices)) {
+    for(const [key,label] of Object.entries(choices)){
       const btn = document.createElement('button');
-      btn.className = 'choice block w-full text-left border rounded px-3 py-2 my-2 hover:bg-gray-50 whitespace-normal';
-      btn.innerHTML = `${key}) ${normalizeTex(label)}`;
+      btn.className = 'w-full text-left border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition';
+      btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(label)}`;
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
     }
 
-    $('#feedback').textContent = '';
-    $('#status').textContent = '';
+    $('#feedback').textContent = ''; $('#status').textContent = '';
     await typeset();
-  } catch (err) {
-    console.error('loadQuestion error:', err);
+  }catch(err){
     $('#status').textContent = `Failed to load question: ${err.message}`;
-    $('#stem').innerHTML = '';
-    $('#choices').innerHTML = '';
-    $('#feedback').textContent = '';
+    $('#stem').innerHTML = ''; $('#choices').innerHTML = ''; $('#feedback').textContent = '';
   }
 }
 
-async function submitAnswer(choiceKey) {
-  if (!attemptId || !currentQ) return;
-  try {
+async function submitAnswer(choiceKey){
+  if(!attemptId || !currentQ) return;
+  try{
     const res = await api(`/api/attempts/${attemptId}/items/`, {
-      method: 'POST',
-      body: JSON.stringify({ question_id: currentQ.id, answer: { choice: choiceKey } })
+      method:'POST',
+      body: JSON.stringify({ question_id: currentQ.id, answer:{ choice: choiceKey } })
     });
-    $('#feedback').textContent = res.is_correct ? '✅ Correct' : '❌ Incorrect';
-    $('#feedback').className = res.is_correct ? 'mt-3 font-semibold text-green-600' : 'mt-3 font-semibold text-red-600';
-  } catch (err) {
+    const ok = !!res.is_correct;
+    $('#feedback').textContent = ok ? '✅ Correct' : '❌ Incorrect';
+    $('#feedback').className = ok ? 'mt-4 font-semibold text-green-600' : 'mt-4 font-semibold text-red-600';
+  }catch(err){
     $('#feedback').textContent = `Submit failed: ${err.message}`;
-    $('#feedback').className = 'mt-3 font-semibold text-red-600';
+    $('#feedback').className = 'mt-4 font-semibold text-red-600';
   }
 }
 
@@ -170,6 +140,7 @@ $('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
 document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 {% endblock %}
+
 
 
 

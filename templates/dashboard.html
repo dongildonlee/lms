@@ -2,33 +2,31 @@
 {% block title %}My Subjects | Wrong-Answer Packets{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-semibold mb-4">My Subjects</h1>
+<h1 class="text-3xl font-semibold mb-6 text-ink">My Subjects</h1>
 
-<div class="bg-white shadow rounded-lg p-4">
+<div class="card p-5">
   <div class="text-sm text-gray-600 mb-4">
     Student ID: <strong>{{ me_sid }}</strong>
   </div>
 
   {% if groups %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
       {% for g in groups %}
-        <div class="border rounded-lg p-4">
-          <div class="flex items-center justify-between mb-2">
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
             <div class="text-xl font-semibold">{{ g.parent }}</div>
-            <a class="text-sm text-white bg-brand px-3 py-1 rounded"
-               href="/practice/?tag={{ g.parent|urlencode }}">Practice</a>
+            <a class="btn btn-primary" href="/practice/?tag={{ g.parent|urlencode }}">Practice</a>
           </div>
 
           {% if g.children %}
-            <div class="text-sm text-gray-700 mb-2">Chapters</div>
+            <div class="text-sm text-gray-600 mb-2">Topics</div>
             <div class="flex flex-wrap gap-2">
               {% for c in g.children %}
-                <a class="px-2 py-1 border rounded hover:bg-gray-50"
-                   href="/practice/?tag={{ c|urlencode }}">{{ c }}</a>
+                <a class="chip" href="/practice/?tag={{ c|urlencode }}">{{ c }}</a>
               {% endfor %}
             </div>
           {% else %}
-            <div class="text-sm text-gray-500">No chapters yet.</div>
+            <div class="text-sm text-gray-500">No topics yet.</div>
           {% endif %}
         </div>
       {% endfor %}
@@ -38,5 +36,6 @@
   {% endif %}
 </div>
 {% endblock %}
+
 
 
