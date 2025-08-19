@@ -31,6 +31,18 @@ const $ = (sel) => document.querySelector(sel);
 let attemptId = null;
 let currentQ = null;
 
+// --- TeX whitespace normalizer ---
+// Many problems in TeX have manual line breaks (\\) and hard newlines
+// that look bad in HTML. Convert them to spaces but keep \\\[ ... \\\] etc.
+function normalizeTex(s) {
+  if (!s) return '';
+  return s
+    .replace(/\\\\(?!\[|\(|\{)/g, ' ')   // \\ -> space unless it's \\\[, \\\(, or \\\{
+    .replace(/\s*\n+\s*/g, ' ')          // collapse newlines
+    .replace(/\s{2,}/g, ' ')             // collapse multiple spaces
+    .trim();
+}
+
 // CSRF cookie helper
 function getCookie(name) {
   const value = `; ${document.cookie}`;
@@ -89,8 +101,8 @@ async function loadQuestion() {
 
     currentQ = qRes.questions[0];
 
-    // Problem text (allow TeX rendering)
-    $('#stem').innerHTML = currentQ.stem_md || '';
+    // Problem text (allow TeX rendering; normalize whitespace first)
+    $('#stem').innerHTML = normalizeTex(currentQ.stem_md);
 
     // Choices
     const choicesDiv = $('#choices');
@@ -99,7 +111,7 @@ async function loadQuestion() {
     for (const [key, label] of Object.entries(choices)) {
       const btn = document.createElement('button');
       btn.className = 'choice block w-full text-left border rounded px-3 py-2 my-2 hover:bg-gray-50';
-      btn.innerHTML = `${key}) ${label}`; // innerHTML so MathJax can render
+      btn.innerHTML = `${key}) ${normalizeTex(label)}`; // normalized so each choice stays on one line
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
     }
@@ -135,3 +147,4 @@ $('#startBtn').addEventListener('click', startPractice);
 $('#nextBtn').addEventListener('click', loadQuestion);
 </script>
 {% endblock %}
+
