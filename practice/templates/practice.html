@@ -128,14 +128,23 @@
         currentQ = qRes.questions[0];
 
         // Render LaTeX content
-        $('#stem').innerHTML = currentQ.stem_md || '';
+        function normalizeTex(s) {
+          if (!s) return '';
+          return s
+            .replace(/\\\\\s*/g, ' ')   // turn TeX linebreaks \\ into spaces
+            .replace(/\s*\n\s*/g, ' ')  // collapse newlines
+            .replace(/\s{2,}/g, ' ')    // collapse runs of spaces
+            .trim();
+        }
+        $('#stem').innerHTML = normalizeTex(currentQ.stem_md);
+
         const choicesDiv = $('#choices');
         choicesDiv.innerHTML = '';
         const choices = currentQ.choices || {};
         for (const [key, label] of Object.entries(choices)) {
           const btn = document.createElement('button');
           btn.className = 'choice';
-          btn.innerHTML = `${key}) ${label}`;   // innerHTML so MathJax can render
+          btn.innerHTML = `${key}) ${normalizeTex(label)}`;
           btn.onclick = () => submitAnswer(key);
           choicesDiv.appendChild(btn);
         }
