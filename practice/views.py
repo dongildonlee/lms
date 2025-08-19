@@ -17,6 +17,8 @@ import traceback
 
 from .models import Question, Attempt, AttemptItem
 from .forms import StudentSignupForm
+from django.db.models.functions import Random
+
 
 
 # --- helpers -----------------------------------------------------------------
@@ -197,7 +199,7 @@ def get_questions(request):
         if tag:
             qs = qs.filter(tags__name__iexact=tag)
 
-        qs = qs.order_by("id")[:max(1, limit)]  # deterministic 1 question for POC
+        qs = qs.order_by(Random())[:max(1, limit)]  # deterministic 1 question for POC
 
         out = []
         for q in qs:
