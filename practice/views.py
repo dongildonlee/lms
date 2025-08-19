@@ -18,7 +18,16 @@ import traceback
 from .models import Question, Attempt, AttemptItem
 from .forms import StudentSignupForm
 from django.db.models.functions import Random
+import re
 
+def _normalize_tex(s: str) -> str:
+    if not s:
+        return s
+    s = re.sub(r'<br\s*/?>', ' ', s, flags=re.I)
+    s = re.sub(r'\\\\(?!\[|\(|\{)', ' ', s)      # \\ -> space (not \\\[, \\\(, \\\{)
+    s = re.sub(r'\s*\n+\s*', ' ', s)             # collapse newlines
+    s = re.sub(r'\s{2,}', ' ', s)                # collapse multi-spaces
+    return s.strip()
 
 
 # --- helpers -----------------------------------------------------------------
@@ -181,6 +190,16 @@ def latest_incorrects(request, student_id: int):
 
     return Response({"count": len(wrong), "questions": wrong})
 
+def _normalize_tex(s: str) -> str:
+    """Flatten TeX linebreaks/newlines to make sentences render on one line in HTML/MathJax."""
+    if not s:
+        return ""
+    s = re.sub(r'<br\s*/?>', ' ', s, flags=re.I)      # <br> -> space
+    s = re.sub(r'\\\\(?!\[|\(|\{)', ' ', s)           # TeX \\ -> space (but keep \\\[, \\\(, \\\{)
+    s = re.sub(r'\s*\n+\s*', ' ', s)                  # collapse newlines
+    s = re.sub(r'\s{2,}', ' ', s)                     # collapse multi-spaces
+    return s.strip()
+
 
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
@@ -199,15 +218,17 @@ def get_questions(request):
         if tag:
             qs = qs.filter(tags__name__iexact=tag)
 
-        qs = qs.order_by(Random())[:max(1, limit)]  # deterministic 1 question for POC
+        # random 1 (or N) questions
+        qs = qs.order_by(Random())[:max(1, limit)]
 
         out = []
         for q in qs:
+            cleaned_choices = {k: _normalize_tex(v) for k, v in (q.choices or {}).items()}
             out.append({
                 "id": q.id,
                 "type": q.type,
-                "stem_md": q.stem_md or "",
-                "choices": q.choices or {},
+                "stem_md": _normalize_tex(q.stem_md or ""),
+                "choices": cleaned_choices,
                 "version": q.version,
                 "tags": list(q.tags.values_list("name", flat=True)),
             })
@@ -218,6 +239,7 @@ def get_questions(request):
             {"error": str(e), "trace": traceback.format_exc()},
             status=500
         )
+
 
 
 # --- pages (templates) -------------------------------------------------------
