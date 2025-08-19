@@ -115,7 +115,7 @@ class Command(BaseCommand):
                 if mm:
                     stem_md = item_text[:mm.start()].strip()
                     choices = split_choices_from_body(mm.group("body"))
-                    qtype = "choices"
+                    qtype = "mcq"
                 else:
                     stem_md = item_text.strip()
                     choices = {}
