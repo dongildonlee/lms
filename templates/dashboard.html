@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}My Subjects | Wrong-Answer Packets{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">My Subjects</h1>
+
+<div class="bg-white shadow rounded-lg p-4">
+  <div class="text-sm text-gray-600 mb-3">
+    Student ID: <strong>{{ me_sid }}</strong>
+  </div>
+
+  {% if subjects %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+      {% for s in subjects %}
+        <a class="block border rounded px-4 py-3 hover:bg-gray-50"
+           href="/practice/?tag={{ s|urlencode }}">
+          <div class="text-lg font-medium">{{ s }}</div>
+          <div class="text-gray-600 text-sm">Practice {{ s }}</div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-gray-700">No subjects assigned yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
