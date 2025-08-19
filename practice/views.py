@@ -15,7 +15,7 @@ from rest_framework import status, permissions
 import io
 import traceback
 
-from .models import Question, Attempt, AttemptItem
+from .models import Question, Attempt, AttemptItem, Tag
 from .forms import StudentSignupForm
 from django.db.models.functions import Random
 import re
@@ -215,30 +215,48 @@ def get_questions(request):
             limit = 1
 
         qs = Question.objects.all()
-        if tag:
-            qs = qs.filter(tags__name__iexact=tag)
 
-        # random 1 (or N) questions
+        # Identify the student
+        student = getattr(request.user, "studentprofile", None)
+
+        if tag:
+            # If a tag is provided and the student has assigned subjects, enforce access
+            if student and student.subjects.exists():
+                qs = qs.filter(tags__name__iexact=tag, tags__in=student.subjects.all())
+            else:
+                qs = qs.filter(tags__name__iexact=tag)
+        else:
+            # No tag provided: if the student has assigned subjects, restrict to them
+            if student and student.subjects.exists():
+                qs = qs.filter(tags__in=student.subjects.all()).distinct()
+
+        # Random question(s)
         qs = qs.order_by(Random())[:max(1, limit)]
+
+        def _norm(s: str) -> str:
+            if not s:
+                return ""
+            s = re.sub(r'<br\s*/?>', ' ', s, flags=re.I)
+            s = re.sub(r'\\\\(?!\[|\(|\{)', ' ', s)   # \\ -> space (keep \\\[, \\\(, \\\{)
+            s = re.sub(r'\s*\n+\s*', ' ', s)          # collapse newlines
+            s = re.sub(r'\s{2,}', ' ', s)             # collapse runs of spaces
+            return s.strip()
 
         out = []
         for q in qs:
-            cleaned_choices = {k: _normalize_tex(v) for k, v in (q.choices or {}).items()}
             out.append({
                 "id": q.id,
                 "type": q.type,
-                "stem_md": _normalize_tex(q.stem_md or ""),
-                "choices": cleaned_choices,
+                "stem_md": _norm(q.stem_md or ""),
+                "choices": {k: _norm(v) for k, v in (q.choices or {}).items()},
                 "version": q.version,
                 "tags": list(q.tags.values_list("name", flat=True)),
             })
 
         return Response({"count": len(out), "questions": out})
     except Exception as e:
-        return Response(
-            {"error": str(e), "trace": traceback.format_exc()},
-            status=500
-        )
+        return Response({"error": str(e), "trace": traceback.format_exc()}, status=500)
+
 
 
 
