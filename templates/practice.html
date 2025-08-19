@@ -15,12 +15,12 @@
   <div id="status" class="mt-2 text-gray-600"></div>
 </div>
 
-<div id="qCard" class="bg-white shadow rounded-lg p-4 hidden">
-  <div id="stem" class="text-lg mb-3"></div>
+<div id="qCard" class="bg-white shadow rounded-lg p-4 hidden" data-v="practice-v2">
+  <div id="stem" class="text-lg mb-3 whitespace-normal"></div>
   <div id="choices"></div>
   <div id="feedback" class="mt-3 font-semibold"></div>
   <div class="mt-4">
-    <button id="nextBtn" class="border px-4 py-2 rounded">Next Question</button>
+    <button id="nextBtn" class="border px-4 py-2 rounded">Next Question ▶</button>
   </div>
 </div>
 {% endblock %}
@@ -31,15 +31,17 @@ const $ = (sel) => document.querySelector(sel);
 let attemptId = null;
 let currentQ = null;
 
-// --- TeX whitespace normalizer ---
-// Many problems in TeX have manual line breaks (\\) and hard newlines
-// that look bad in HTML. Convert them to spaces but keep \\\[ ... \\\] etc.
+// --- TeX whitespace normalizer (v2) ---
+// - Turn TeX linebreaks \\ into spaces (but keep \\\[, \\\(, \\\{ intact)
+// - Collapse real newlines and multiple spaces
+// - Strip stray <br> if any sneaked in
 function normalizeTex(s) {
   if (!s) return '';
   return s
-    .replace(/\\\\(?!\[|\(|\{)/g, ' ')   // \\ -> space unless it's \\\[, \\\(, or \\\{
-    .replace(/\s*\n+\s*/g, ' ')          // collapse newlines
-    .replace(/\s{2,}/g, ' ')             // collapse multiple spaces
+    .replace(/<br\s*\/?>/gi, ' ')           // HTML <br> -> space
+    .replace(/\\\\(?!\[|\(|\{)/g, ' ')      // TeX \\ -> space (except \\\[, \\\(, \\\{)
+    .replace(/\s*\n+\s*/g, ' ')             // newlines -> space
+    .replace(/\s{2,}/g, ' ')                // collapse spaces
     .trim();
 }
 
@@ -101,7 +103,7 @@ async function loadQuestion() {
 
     currentQ = qRes.questions[0];
 
-    // Problem text (allow TeX rendering; normalize whitespace first)
+    // Stem (normalized so long sentences don’t break every few words)
     $('#stem').innerHTML = normalizeTex(currentQ.stem_md);
 
     // Choices
@@ -110,8 +112,8 @@ async function loadQuestion() {
     const choices = currentQ.choices || {};
     for (const [key, label] of Object.entries(choices)) {
       const btn = document.createElement('button');
-      btn.className = 'choice block w-full text-left border rounded px-3 py-2 my-2 hover:bg-gray-50';
-      btn.innerHTML = `${key}) ${normalizeTex(label)}`; // normalized so each choice stays on one line
+      btn.className = 'choice block w-full text-left border rounded px-3 py-2 my-2 hover:bg-gray-50 whitespace-normal';
+      btn.innerHTML = `${key}) ${normalizeTex(label)}`;
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
     }
@@ -147,4 +149,5 @@ $('#startBtn').addEventListener('click', startPractice);
 $('#nextBtn').addEventListener('click', loadQuestion);
 </script>
 {% endblock %}
+
 
