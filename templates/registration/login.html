@@ -1,59 +1,68 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Sign in</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: system-ui, -apple-system, Arial; max-width: 420px; margin: 60px auto; }
-    .err { color:#c00; }
-    input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:8px; }
-    button, .btn {
-      display:inline-block; margin-top:12px; padding:10px 14px;
-      border:1px solid #ccc; border-radius:10px; cursor:pointer; text-decoration:none; color:#000;
-      background:#f6f6f6;
-    }
-    .inline { margin-left:10px; }
-    a { color:#06c; }
-  </style>
-</head>
-<body>
-  <h1>Sign in</h1>
+{% extends "base.html" %}
+{% block title %}Sign in | Wrong-Answer Packets{% endblock %}
 
-  {% if form.non_field_errors %}<p class="err">{{ form.non_field_errors }}</p>{% endif %}
-  {% if form.errors and not form.non_field_errors %}<p class="err">Invalid username or password.</p>{% endif %}
+{% block content %}
+<div class="max-w-md mx-auto bg-white/80 backdrop-blur shadow-xl rounded-2xl p-6">
+  <h1 class="text-xl font-semibold mb-4">Sign in</h1>
 
-  <form method="post" action="{% url 'login' %}">
+  {% if form.non_field_errors %}
+    <div class="text-red-600 mb-3">
+      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+    </div>
+  {% endif %}
+  {% if form.errors and not form.non_field_errors %}
+    <div class="text-red-600 mb-3">Invalid username or password.</div>
+  {% endif %}
+
+  <form method="post" action="{% url 'login' %}" class="space-y-4">
     {% csrf_token %}
 
-    {# keep ?next=... so users return to where they came from #}
     {% if request.GET.next %}
       <input type="hidden" name="next" value="{{ request.GET.next }}">
     {% endif %}
 
-    <div style="margin-bottom:10px;">
-      <label for="{{ form.username.id_for_label }}">Username</label><br>
-      {{ form.username }}
-      {% for e in form.username.errors %}<div class="err">{{ e }}</div>{% endfor %}
-    </div>
     <div>
-      <label for="{{ form.password.id_for_label }}">Password</label><br>
-      {{ form.password }}
-      {% for e in form.password.errors %}<div class="err">{{ e }}</div>{% endfor %}
+      <label class="text-sm text-gray-700" for="{{ form.username.id_for_label }}">Username</label>
+      {{ form.username }}
+      {% for e in form.username.errors %}<div class="text-red-600 text-sm">{{ e }}</div>{% endfor %}
     </div>
 
-    <button type="submit">Sign in</button>
-    <a class="btn inline" href="{% url 'password_reset' %}">Forgot password?</a>
+    <div>
+      <label class="text-sm text-gray-700" for="{{ form.password.id_for_label }}">Password</label>
+      {{ form.password }}
+      {% for e in form.password.errors %}<div class="text-red-600 text-sm">{{ e }}</div>{% endfor %}
+    </div>
+
+    <button class="btn btn-primary w-full">Sign in</button>
   </form>
 
-  <p style="margin-top:12px;">
-    New here? <a href="{% url 'register' %}">Create an account</a>
+  <p class="text-sm text-gray-700 mt-4">
+    New here? <a class="text-brand underline" href="{% url 'register' %}">Create an account</a>
   </p>
 
-  <!-- Admin login button/link -->
-  <p style="margin-top:8px;">
-    <a href="{% url 'admin:index' %}" class="btn">Admin login</a>
+  <p class="text-xs text-gray-600 mt-2">
+    Admins: <a href="{% url 'admin:index' %}" class="underline">open admin</a>
   </p>
-</body>
-</html>
+</div>
+
+<style>
+/* Make the Django auth form widgets look nice */
+form input[type="text"],
+form input[type="password"],
+form input[type="email"]{
+  width:100%; padding:.65rem .8rem; border:1px solid #e5e7eb;
+  border-radius:.75rem; background:white;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const u = document.getElementById("id_username");
+  if (u) u.focus();
+</script>
+{% endblock %}
+
+
+
 
