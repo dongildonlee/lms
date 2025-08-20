@@ -1,6 +1,21 @@
 {% extends "base.html" %}
 {% block title %}My Subjects | Wrong-Answer Packets{% endblock %}
 
+{% load static %}
+<section class="relative overflow-hidden rounded-2xl mb-8">
+  <!-- Use the 4K version for performance; swap to 8K if you really want full detail -->
+  <img src="{% static 'img/moon_4k.jpg' %}"
+       alt="NASA LROC 8K Moon map"
+       class="w-full h-72 object-cover md:h-96">
+  <!-- subtle gradient so white text reads well -->
+  <div class="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/40"></div>
+  <div class="absolute bottom-4 left-4 text-white">
+    <h2 class="text-2xl md:text-3xl font-semibold">Moonshot Lab</h2>
+    <p class="text-sm md:text-base opacity-90">Data: NASA SVS LROC 8K</p>
+  </div>
+</section>
+
+
 {% block content %}
 <h1 class="text-3xl font-semibold mb-6 text-ink">My Subjects</h1>
 

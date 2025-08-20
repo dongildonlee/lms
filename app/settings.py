@@ -156,6 +156,7 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
 }
 
+
 # ------------------------------------------------------------
 # Auth redirects
 # ------------------------------------------------------------
@@ -167,5 +168,4 @@ LOGOUT_REDIRECT_URL = "/accounts/login/"
 # Default PK type
 # ------------------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
 
