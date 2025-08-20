@@ -54,7 +54,7 @@
     .no-webgl #moon-wrap, .reduced-motion #moon-wrap {
       background:
         radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%),
-        url("{% static 'img/moon_4k.jpg' %}") center/cover no-repeat;
+        url("{% static 'img/lroc_color_poles_4k.jpg' %}") center/cover no-repeat;
     }
     .no-webgl #bg3d, .reduced-motion #bg3d { display:none; }
 
@@ -154,7 +154,7 @@
       const texLoader = new THREE.TextureLoader();
 
       // >>> Use your static Moon texture (NASA LROC 8k -> converted JPG)
-      const moonTex = texLoader.load("{% static 'img/moon_4k.jpg' %}");
+      const moonTex = texLoader.load("{% static 'img/lroc_color_poles_4k.jpg' %}");
       moonTex.colorSpace = THREE.SRGBColorSpace;
       moonTex.anisotropy = 8;
 
