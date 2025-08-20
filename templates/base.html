@@ -76,6 +76,30 @@
 
     /* Keep app content above backgrounds */
     header, main, footer { position: relative; z-index: 10; }
+
+    /* ===== ONLY CHANGE: make form fields readable (dark text on white) ===== */
+    input, textarea, select {
+      color: #0f172a !important;       /* dark ink */
+      background: #ffffff !important;  /* white background */
+      caret-color: #0f172a;
+      border: 1px solid #e5e7eb;
+      border-radius: .75rem;
+      padding: .65rem .8rem;
+    }
+    input::placeholder, textarea::placeholder {
+      color: #64748b; /* slate-500 */
+      opacity: 1;
+    }
+    /* Chrome/Safari autofill fix: keep dark text and white bg */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    textarea:-webkit-autofill,
+    select:-webkit-autofill {
+      -webkit-text-fill-color: #0f172a !important;
+      box-shadow: 0 0 0px 1000px #ffffff inset;
+      transition: background-color 9999s ease-out 0s;
+    }
   </style>
 
   <!-- MathJax (used on practice/teacher pages) -->
@@ -119,7 +143,7 @@
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-10 text-white">
+  <main class="max-w-6xl mx-auto px-4 py-10">
     {% block content %}{% endblock %}
   </main>
 
@@ -215,6 +239,7 @@
   </script>
 </body>
 </html>
+
 
 
 
