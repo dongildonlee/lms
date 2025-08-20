@@ -31,10 +31,20 @@
     html,body { height:100%; }
     body { font-family: Inter, ui-sans-serif, system-ui; background: var(--bg); }
 
-    /* ===== 3D background layer ===== */
+    /* ===== Always-on background image (shows regardless of WebGL) ===== */
+    body::before{
+      content:"";
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%),
+        url("{% static 'img/lroc_color_poles_4k.jpg' %}") center/cover no-repeat fixed;
+      filter: saturate(0.95) brightness(0.9);
+    }
+
+    /* ===== 3D background layer (sits above the CSS image, below content) ===== */
     #moon-wrap{
       position: fixed; inset: 0;
-      z-index: 0;           /* content will sit above this */
+      z-index: 1;           /* content will sit above this */
       pointer-events: none; /* never capture clicks */
       overflow: hidden;
     }
@@ -46,15 +56,13 @@
       background:
         radial-gradient(70% 60% at 80% 10%, rgba(37,99,235,.12), transparent 55%),
         linear-gradient(to bottom, rgba(2,6,23,.35), rgba(2,6,23,.65));
-      z-index:1;
+      z-index:2;
     }
 
-    /* ---- Fallback background when WebGL off / motion reduced ----
-       Uses your local Moon JPG served by Django static files. */
+    /* ---- Fallback background when WebGL off / motion reduced ---- */
     .no-webgl #moon-wrap, .reduced-motion #moon-wrap {
       background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%),
-        url("{% static 'img/lroc_color_poles_4k.jpg' %}") center/cover no-repeat;
+        radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%);
     }
     .no-webgl #bg3d, .reduced-motion #bg3d { display:none; }
 
@@ -142,7 +150,7 @@
       const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 1000);
       camera.position.set(0, 0, 130);
 
-      // Lights
+      // Lights (side light + ambient)
       const key = new THREE.DirectionalLight(0xffffff, 1.05);
       key.position.set(2, 1.2, 2.2);
       scene.add(key);
@@ -153,21 +161,21 @@
       const geo = new THREE.SphereGeometry(R, 64, 64);
       const texLoader = new THREE.TextureLoader();
 
-      // >>> Use your static Moon texture (NASA LROC 8k -> converted JPG)
+      // Use your LROC 4K JPG (converted from the 8K TIF)
       const moonTex = texLoader.load("{% static 'img/lroc_color_poles_4k.jpg' %}");
       moonTex.colorSpace = THREE.SRGBColorSpace;
       moonTex.anisotropy = 8;
 
       const mat = new THREE.MeshPhongMaterial({
         map: moonTex,
-        bumpMap: moonTex,      // reuse as a light bump for some relief
+        bumpMap: moonTex,
         bumpScale: 0.35,
         shininess: 6
       });
       const moon = new THREE.Mesh(geo, mat);
       scene.add(moon);
 
-      // Red pin (set your own lat/lon below)
+      // Red pin (optional)
       const pin = new THREE.Group();
       const pinStem = new THREE.Mesh(
         new THREE.CylinderGeometry(0.3, 0.3, 6, 12),
@@ -192,10 +200,10 @@
       }
 
       // Example: (lat, lon) = (20°, -45°)
-      const pinPos = latLonToVec3(20, -45, R * 1.05); // slightly above surface
+      const pinPos = latLonToVec3(20, -45, R * 1.05);
       pin.position.copy(pinPos);
-      pin.lookAt(new THREE.Vector3(0,0,0)); // orient toward center
-      pin.rotateX(Math.PI/2);               // stem stands up
+      pin.lookAt(new THREE.Vector3(0,0,0));
+      pin.rotateX(Math.PI/2);
 
       // Resize
       function resize() {
@@ -208,8 +216,7 @@
 
       // Animate
       function tick() {
-        moon.rotation.y += 0.0016;         // spin
-        // keep pin stuck to rotating surface (rotate in opposite space)
+        moon.rotation.y += 0.0016;
         pin.rotateOnWorldAxis(new THREE.Vector3(0,1,0), 0.0016);
         renderer.render(scene, camera);
         requestAnimationFrame(tick);
@@ -219,6 +226,7 @@
   </script>
 </body>
 </html>
+
 
 
 
