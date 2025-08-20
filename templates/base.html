@@ -4,9 +4,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1020" />
   <title>{% block title %}Wrong-Answer Packets{% endblock %}</title>
 
-  <!-- Inter font + Tailwind (no build step) -->
+  <!-- Fonts + Tailwind (no build step) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,35 +23,37 @@
     }
   </script>
 
-  <!-- Global tokens + background container styles -->
+  <!-- Preload your moon image so the background appears immediately -->
+  <link rel="preload" as="image" href="{% static 'img/lroc_color_poles_4k.jpg' %}">
+
   <style>
     :root{
-      --brand:#2563eb; --brand-dark:#1d4ed8;
-      --bg:#0b1020; /* dark base so space looks right under translucency */
+      --brand:#2563eb; --brand-dark:#1d4ed8; --bg:#0b1020;
     }
     html,body { height:100%; }
     body { font-family: Inter, ui-sans-serif, system-ui; background: var(--bg); }
 
-    /* ===== Always-on background image (shows regardless of WebGL) ===== */
+    /* ===== Always-on background image (works even if WebGL is off) ===== */
     body::before{
       content:"";
-      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      position:fixed; inset:0; z-index:0; pointer-events:none;
       background:
         radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%),
         url("{% static 'img/lroc_color_poles_4k.jpg' %}") center/cover no-repeat fixed;
       filter: saturate(0.95) brightness(0.9);
+      transform: translateZ(0);  /* helps some GPUs */
     }
 
-    /* ===== 3D background layer (sits above the CSS image, below content) ===== */
+    /* ===== 3D background layer (optional), sits above CSS bg but below content ===== */
     #moon-wrap{
       position: fixed; inset: 0;
-      z-index: 1;           /* content will sit above this */
-      pointer-events: none; /* never capture clicks */
+      z-index: 1;
+      pointer-events: none;
       overflow: hidden;
     }
     #bg3d{ width:100%; height:100%; display:block; }
 
-    /* soft gradient veil so content reads well */
+    /* Readability veil on top of backgrounds */
     #veil{
       position:absolute; inset:0; pointer-events:none;
       background:
@@ -59,14 +62,10 @@
       z-index:2;
     }
 
-    /* ---- Fallback background when WebGL off / motion reduced ---- */
-    .no-webgl #moon-wrap, .reduced-motion #moon-wrap {
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,.18), transparent 60%);
-    }
+    /* If WebGL is disabled or motion is reduced, just keep the CSS background */
     .no-webgl #bg3d, .reduced-motion #bg3d { display:none; }
 
-    /* ---- UI primitives (buttons) ---- */
+    /* UI buttons */
     .btn { display:inline-flex; align-items:center; justify-content:center;
            gap:.5rem; padding:.6rem 1rem; border-radius:.75rem; font-weight:600;
            transition:all .15s ease; border:1px solid transparent; }
@@ -75,11 +74,11 @@
     .btn-outline { background:#ffffffcc; border-color:#e5e7eb; color:#0f172a; backdrop-filter: blur(6px); }
     .btn-outline:hover { border-color:var(--brand); color:var(--brand); }
 
-    /* keep main content above background */
+    /* Keep app content above backgrounds */
     header, main, footer { position: relative; z-index: 10; }
   </style>
 
-  <!-- MathJax (kept for practice/teacher pages) -->
+  <!-- MathJax (used on practice/teacher pages) -->
   <script>
     window.MathJax = { tex:{inlineMath:[['$','$'],['\\(','\\)']]}, svg:{fontCache:'global'} };
   </script>
@@ -88,13 +87,13 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- 3D Moon background (behind everything) -->
+  <!-- Optional 3D background -->
   <div id="moon-wrap" aria-hidden="true">
     <canvas id="bg3d"></canvas>
     <div id="veil"></div>
   </div>
 
-  <!-- Sticky header -->
+  <!-- Header -->
   <header class="sticky top-0 z-30 backdrop-blur bg-white/70 border-b">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
       {% if user.is_authenticated %}
@@ -130,11 +129,10 @@
 
   {% block scripts %}{% endblock %}
 
-  <!-- three.js (global build; no bundler needed) -->
+  <!-- three.js (optional) -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
     (function () {
-      // Respect user preference
       const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (prefersReduced) document.body.classList.add('reduced-motion');
 
@@ -150,7 +148,7 @@
       const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 1000);
       camera.position.set(0, 0, 130);
 
-      // Lights (side light + ambient)
+      // Lights
       const key = new THREE.DirectionalLight(0xffffff, 1.05);
       key.position.set(2, 1.2, 2.2);
       scene.add(key);
@@ -159,23 +157,20 @@
       // Moon
       const R = 50;
       const geo = new THREE.SphereGeometry(R, 64, 64);
-      const texLoader = new THREE.TextureLoader();
-
-      // Use your LROC 4K JPG (converted from the 8K TIF)
-      const moonTex = texLoader.load("{% static 'img/lroc_color_poles_4k.jpg' %}");
-      moonTex.colorSpace = THREE.SRGBColorSpace;
-      moonTex.anisotropy = 8;
+      const tex = new THREE.TextureLoader().load("{% static 'img/lroc_color_poles_4k.jpg' %}");
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
 
       const mat = new THREE.MeshPhongMaterial({
-        map: moonTex,
-        bumpMap: moonTex,
+        map: tex,
+        bumpMap: tex,
         bumpScale: 0.35,
         shininess: 6
       });
       const moon = new THREE.Mesh(geo, mat);
       scene.add(moon);
 
-      // Red pin (optional)
+      // Optional red pin demo
       const pin = new THREE.Group();
       const pinStem = new THREE.Mesh(
         new THREE.CylinderGeometry(0.3, 0.3, 6, 12),
@@ -189,7 +184,6 @@
       pin.add(pinStem); pin.add(pinHead);
       scene.add(pin);
 
-      // Convert lat/lon to a position on the sphere surface
       function latLonToVec3(latDeg, lonDeg, radius) {
         const lat = THREE.MathUtils.degToRad(latDeg);
         const lon = THREE.MathUtils.degToRad(lonDeg);
@@ -198,14 +192,10 @@
         const z = radius * Math.cos(lat) * Math.sin(lon);
         return new THREE.Vector3(x, y, z);
       }
-
-      // Example: (lat, lon) = (20°, -45°)
-      const pinPos = latLonToVec3(20, -45, R * 1.05);
-      pin.position.copy(pinPos);
+      pin.position.copy(latLonToVec3(20, -45, R * 1.05));
       pin.lookAt(new THREE.Vector3(0,0,0));
       pin.rotateX(Math.PI/2);
 
-      // Resize
       function resize() {
         const w = canvas.clientWidth, h = canvas.clientHeight;
         renderer.setSize(w, h, false);
@@ -214,7 +204,6 @@
       window.addEventListener('resize', resize);
       resize();
 
-      // Animate
       function tick() {
         moon.rotation.y += 0.0016;
         pin.rotateOnWorldAxis(new THREE.Vector3(0,1,0), 0.0016);
@@ -226,6 +215,7 @@
   </script>
 </body>
 </html>
+
 
 
 
