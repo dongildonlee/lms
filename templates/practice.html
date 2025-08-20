@@ -2,19 +2,24 @@
 {% block title %}Practice | Wrong-Answer Packets{% endblock %}
 
 {% block content %}
-<h1 class="text-3xl font-semibold mb-6">
-  Practice <span id="subjectLabel" class="text-gray-500 text-lg"></span>
+<h1 class="text-3xl font-semibold mb-6 text-white drop-shadow">
+  Practice <span id="subjectLabel" class="text-gray-300 text-lg"></span>
 </h1>
 
-<!-- MathJax layout tweaks (keep inline so it only applies here) -->
+<!-- MathJax layout tweaks (scoped to this page) + legible colors -->
 <style>
+  /* Keep TeX inline by default */
   #qCard mjx-container { line-height: 1.6; }
   #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
   #qCard mjx-container:not([display="true"]) { display:inline; }
   #qCard mjx-container * { display:inline !important; white-space:normal !important; }
+
+  /* Ensure readable dark text inside the card */
+  #qCard, #qCard * { color: #0f172a; } /* ink */
 </style>
 
-<div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
+<!-- Card uses dark text explicitly -->
+<div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden text-ink">
   <div id="stem" class="text-lg mb-4 whitespace-normal leading-7"></div>
 
   <div id="choices" class="space-y-2"></div>
@@ -33,7 +38,8 @@
   </div>
 </div>
 
-<div id="status" class="mt-4 text-gray-600"></div>
+<!-- Status stays readable over dark bg -->
+<div id="status" class="mt-4 text-white/80"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -106,7 +112,8 @@ async function loadQuestion(tag){
     const choices = currentQ.choices || {};
     for(const [key,label] of Object.entries(choices)){
       const btn = document.createElement('button');
-      btn.className = 'w-full text-left border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition';
+      // Force dark, legible text on choices
+      btn.className = 'w-full text-left text-slate-900 border border-gray-200 rounded-xl px-4 py-3 hover:bg-gray-50 transition';
       btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(label)}`;
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
@@ -140,6 +147,7 @@ $('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
 document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 {% endblock %}
+
 
 
 
