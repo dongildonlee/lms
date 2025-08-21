@@ -20,6 +20,20 @@ from .forms import StudentSignupForm
 from django.db.models.functions import Random
 import re
 
+# add near your other imports
+from django.template.loader import render_to_string
+from django.utils.safestring import mark_safe
+
+# try WeasyPrint; fall back to ReportLab if unavailable (e.g., on free PaaS)
+try:
+    from weasyprint import HTML
+    WEASY_OK = True
+except Exception:
+    WEASY_OK = False
+
+from .utils.katex_render import render_md_with_katex
+
+
 def _normalize_tex(s: str) -> str:
     if not s:
         return s
@@ -348,21 +362,49 @@ def _make_pdf(student_id: int, questions):
     buf.close()
     return pdf
 
+def _missed_questions_markdown(questions):
+    """Build a Markdown document with TeX kept as $...$."""
+    parts = []
+    for i, q in enumerate(questions, start=1):
+        parts.append(f"**Q{i}.** {q.stem_md}".strip())
+        if isinstance(q.choices, dict) and q.choices:
+            for key, text in q.choices.items():
+                parts.append(f"- **{key})** {text}")
+        parts.append("")  # blank line between questions
+    return "\n".join(parts)
 
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def wrong_questions_pdf(request, student_id: int):
-    # only the owner or a teacher can view
+    # only owner or teacher
     if student_id != request.user.id and not user_is_teacher(request.user):
         return Response({"detail": "Forbidden"}, status=403)
 
     qs = _latest_wrong_questions(student_id)
-    pdf_bytes = _make_pdf(student_id, qs)
+
+    # If WeasyPrint is available, render math nicely
+    if WEASY_OK:
+        md_text = _missed_questions_markdown(qs)
+        body_html = render_md_with_katex(md_text)
+        html_doc = render_to_string(
+            "print/missed_problems.html",
+            {
+                "body": mark_safe(body_html),
+                "student": request.user if student_id == request.user.id else User.objects.get(id=student_id),
+                "sid": getattr(getattr(request.user, "studentprofile", None), "sid", f"S{student_id:06d}"),
+            },
+            request=request,
+        )
+        pdf_bytes = HTML(string=html_doc, base_url=request.build_absolute_uri("/")).write_pdf()
+    else:
+        # Fallback to your original ReportLab PDF (no TeX rendering)
+        pdf_bytes = _make_pdf(student_id, qs)
 
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
-    resp["Content-Disposition"] = f'inline; filename="still_missed_student_{student_id}.pdf"'
+    resp["Content-Disposition"] = f'attachment; filename="still_missed_student_{student_id}.pdf"'
     return resp
+
 
 
 @login_required
