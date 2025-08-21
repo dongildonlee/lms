@@ -1,56 +1,81 @@
 {% extends "base.html" %}
-{% block title %}My Subjects | Wrong-Answer Packets{% endblock %}
-
-{% load static %}
-<section class="relative overflow-hidden rounded-2xl mb-8">
-  <!-- Use the 4K version for performance; swap to 8K if you really want full detail -->
-  <img src="{% static 'img/moon_4k.jpg' %}"
-       alt="NASA LROC 8K Moon map"
-       class="w-full h-72 object-cover md:h-96">
-  <!-- subtle gradient so white text reads well -->
-  <div class="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/40"></div>
-  <div class="absolute bottom-4 left-4 text-white">
-    <h2 class="text-2xl md:text-3xl font-semibold">Moonshot Lab</h2>
-    <p class="text-sm md:text-base opacity-90">Data: NASA SVS LROC 8K</p>
-  </div>
-</section>
-
+{% block title %}Dashboard | Wrong-Answer Packets{% endblock %}
 
 {% block content %}
-<h1 class="text-3xl font-semibold mb-6 text-ink">My Subjects</h1>
+<h1 class="text-4xl font-semibold mb-6 text-white drop-shadow">My Subjects</h1>
 
-<div class="card p-5">
-  <div class="text-sm text-gray-600 mb-4">
-    Student ID: <strong>{{ me_sid }}</strong>
-  </div>
+<style>
+  /* Frosted glass primitives */
+  .glass{
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 1rem;                 /* 16px */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    transition: transform .18s ease, background .18s ease, border-color .18s ease;
+  }
+  .glass:hover{
+    background: rgba(255,255,255,.16);
+    border-color: rgba(255,255,255,.35);
+    transform: translateY(-2px);
+  }
+  .glass-muted{ color: rgba(226,232,240,.9); }   /* slate-200/90 */
+  .glass-title{ color:#fff; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
 
-  {% if groups %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-      {% for g in groups %}
-        <div class="card p-5">
-          <div class="flex items-center justify-between mb-3">
-            <div class="text-xl font-semibold">{{ g.parent }}</div>
-            <a class="btn btn-primary" href="/practice/?tag={{ g.parent|urlencode }}">Practice</a>
-          </div>
+  /* Topic chips */
+  .glass-chip{
+    display:inline-block;
+    padding:.35rem .65rem;
+    border-radius:9999px;
+    background: rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.3);
+    color:#fff;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .glass-chip:hover{
+    background: rgba(255,255,255,.22);
+    border-color: rgba(255,255,255,.45);
+    transform: translateY(-1px);
+  }
+</style>
 
-          {% if g.children %}
-            <div class="text-sm text-gray-600 mb-2">Topics</div>
-            <div class="flex flex-wrap gap-2">
-              {% for c in g.children %}
-                <a class="chip" href="/practice/?tag={{ c|urlencode }}">{{ c }}</a>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="text-sm text-gray-500">No topics yet.</div>
-          {% endif %}
-        </div>
-      {% endfor %}
-    </div>
-  {% else %}
-    <p class="text-gray-700">No subjects assigned yet.</p>
-  {% endif %}
+<!-- Small ID pill -->
+<div class="glass inline-block px-4 py-2 mb-6">
+  <span class="glass-muted text-sm">Student ID:</span>
+  <strong class="text-white">{{ me_sid }}</strong>
 </div>
+
+{% if groups %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for g in groups %}
+      <section class="glass p-6">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="glass-title text-2xl font-semibold">{{ g.parent }}</h2>
+          <a href="/practice/?tag={{ g.parent|urlencode }}"
+             class="btn btn-primary !text-white">Practice</a>
+        </div>
+
+        {% if g.children %}
+          <p class="glass-muted mt-3">Topics</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            {% for c in g.children %}
+              <a class="glass-chip" href="/practice/?tag={{ c|urlencode }}">{{ c }}</a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="glass-muted mt-4">No topics yet.</p>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="glass-muted">No subjects assigned yet.</p>
+{% endif %}
 {% endblock %}
+
 
 
 
