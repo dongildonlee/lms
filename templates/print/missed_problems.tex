@@ -1,0 +1,33 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=1.4em}
+
+\begin{document}
+\section*{Personalized Practice --- {{ sid }}}
+
+{% if questions|length == 0 %}
+No current still-missed questions.
+{% else %}
+\begin{enumerate}
+{% for q in questions %}
+\item {{ q.stem_md|safe }}
+
+{% if q.choices %}
+\begin{itemize}
+{% for k, v in q.choices.items %}
+\item \textbf{({{ k }})} {{ v|safe }}
+{% endfor %}
+\end{itemize}
+{% endif %}
+
+\vspace{0.8em}
+{% endfor %}
+\end{enumerate}
+{% endif %}
+
+\end{document}

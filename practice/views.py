@@ -15,12 +15,19 @@ from rest_framework import status, permissions
 import io
 import traceback
 import re
+import os
+import tempfile
+import subprocess
+import shutil, logging
 
 from django.db.models.functions import Random
 
 from .models import Question, Attempt, AttemptItem, Tag
 from .forms import StudentSignupForm
+from django.template.loader import render_to_string
 
+
+logger = logging.getLogger(__name__)
 
 def _normalize_tex(s: str) -> str:
     if not s:
@@ -54,6 +61,41 @@ def evaluate_answer(q: Question, submitted: dict) -> bool:
         norm = lambda s: "".join((s or "").lower().split())
         return norm(submitted.get("text")) == norm((q.correct or {}).get("text"))
     return False
+
+def _render_latex_pdf(tex_source: str) -> bytes:
+    """
+    Compile LaTeX to PDF using Tectonic.
+    Tries modern '-X compile' first; falls back to legacy '<file> --outdir ...'.
+    """
+    exe = _tectonic_path()
+    if not exe:
+        raise RuntimeError("tectonic_not_found")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tex_path = os.path.join(tmp, "doc.tex")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(tex_source)
+
+        env = os.environ.copy()
+        env.setdefault("TEXMFHOME", os.path.join(tmp, "texmf"))
+
+        # Try modern CLI
+        cmd_modern = [exe, "-X", "compile", tex_path, "--outdir", tmp, "--synctex=0", "--keep-logs"]
+        proc = subprocess.run(cmd_modern, cwd=tmp, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if proc.returncode != 0:
+            # Fallback to legacy CLI
+            cmd_legacy = [exe, tex_path, "--outdir", tmp, "--synctex=0", "--keep-logs"]
+            proc2 = subprocess.run(cmd_legacy, cwd=tmp, env=env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            if proc2.returncode != 0:
+                raise RuntimeError("tectonic_failed:\n" + proc.stdout + "\n" + proc2.stdout)
+
+        pdf_path = os.path.join(tmp, "doc.pdf")
+        with open(pdf_path, "rb") as fh:
+            return fh.read()
+
+
 
 
 # --- auth pages ---------------------------------------------------------------
@@ -160,16 +202,6 @@ def latest_incorrects(request, student_id: int):
 
     return Response({"count": len(wrong), "questions": wrong})
 
-
-def _normalize_tex(s: str) -> str:
-    """Flatten TeX linebreaks/newlines to make sentences render on one line in HTML/MathJax."""
-    if not s:
-        return ""
-    s = re.sub(r'<br\s*/?>', ' ', s, flags=re.I)      # <br> -> space
-    s = re.sub(r'\\\\(?!\[|\(|\{)', ' ', s)           # TeX \\ -> space (but keep \\\[, \\\(, \\\{)
-    s = re.sub(r'\s*\n+\s*', ' ', s)                  # collapse newlines
-    s = re.sub(r'\s{2,}', ' ', s)                     # collapse multi-spaces
-    return s.strip()
 
 
 def _descendant_tags_by_name(name: str):
@@ -318,6 +350,90 @@ def _make_pdf(student_id: int, questions):
     return pdf
 
 
+# ----- TECTONIC (LaTeX) PATH -------------------------------------------------
+TECTONIC_BIN = os.getenv("TECTONIC_BIN", "tectonic")
+
+def _tectonic_path():
+    """Return path to tectonic binary (project ./bin or PATH), or None."""
+    from django.conf import settings
+    local = os.path.join(settings.BASE_DIR, "bin", "tectonic")
+    if os.path.isfile(local) and os.access(local, os.X_OK):
+        return local
+    return shutil.which("tectonic")
+
+
+def _render_latex_pdf_from_template(template_name: str, ctx: dict) -> bytes:
+    """
+    Render a Django .tex template and compile it to PDF with Tectonic.
+    Raises on failure. Callers should catch and fallback.
+    """
+    exe = _tectonic_path()
+    if not exe:
+        raise RuntimeError("tectonic_not_found")
+
+    tex_source = render_to_string(template_name, ctx)
+
+    with tempfile.TemporaryDirectory() as td:
+        tex_path = os.path.join(td, "doc.tex")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(tex_source)
+
+        env = os.environ.copy()
+        env.setdefault("TEXMFHOME", os.path.join(td, "texmf"))
+
+        # -q (quiet) keeps logs small; remove if you want verbose logs
+        proc = subprocess.run(
+            [exe, "-q", "--outdir", td, tex_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=td,
+            env=env,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"tectonic_failed\n{proc.stdout}")
+
+        pdf_path = os.path.join(td, "doc.pdf")
+        with open(pdf_path, "rb") as fh:
+            return fh.read()
+
+
+def _build_latex_doc(student_id: int, questions) -> str:
+    """Return a complete LaTeX document as a string."""
+    sid = f"S{student_id:06d}"
+    lines = [
+        r"\documentclass[11pt]{article}",
+        r"\usepackage[T1]{fontenc}",
+        r"\usepackage[utf8]{inputenc}",
+        r"\usepackage{lmodern}",
+        r"\usepackage{amsmath,amssymb}",
+        r"\usepackage[margin=1in]{geometry}",
+        r"\usepackage{enumitem}",
+        r"\setlist[itemize]{leftmargin=1.4em}",
+        r"\begin{document}",
+        rf"\section*{{Personalized Practice --- {sid}}}",
+        ""
+    ]
+    if not questions:
+        lines.append("No current still-missed questions.")
+    else:
+        lines.append(r"\begin{enumerate}")
+        for q in questions:
+            # stems/choices already contain math like $...$ — we insert verbatim
+            lines.append(r"\item " + (q.stem_md or ""))
+
+            if isinstance(q.choices, dict) and q.choices:
+                lines.append(r"\begin{itemize}")
+                for k, v in q.choices.items():
+                    lines.append(rf"\item \textbf{{({k})}} {v}")
+                lines.append(r"\end{itemize}")
+
+            lines.append(r"\vspace{0.8em}")
+        lines.append(r"\end{enumerate}")
+    lines.append(r"\end{document}")
+    return "\n".join(lines)
+
+
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def wrong_questions_pdf(request, student_id: int):
@@ -327,12 +443,25 @@ def wrong_questions_pdf(request, student_id: int):
 
     qs = _latest_wrong_questions(student_id)
 
-    # Simple, reliable ReportLab PDF (no external binaries)
-    pdf_bytes = _make_pdf(student_id, qs)
+    # Build context for the .tex template
+    sid = getattr(getattr(request.user, "studentprofile", None), "sid", f"S{student_id:06d}")
+    ctx = {
+        "sid": sid,
+        "questions": [{"stem_md": q.stem_md or "", "choices": (q.choices or {})} for q in qs],
+    }
+
+    try:
+        pdf_bytes = _render_latex_pdf_from_template("print/missed_problems.tex", ctx)
+    except Exception as e:
+        # If LaTeX isn’t available or compilation fails, fallback to the simple PDF
+        logger.exception("LaTeX PDF failed; falling back to ReportLab")
+        pdf_bytes = _make_pdf(student_id, qs)
 
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'attachment; filename="still_missed_student_{student_id}.pdf"'
     return resp
+
+
 
 
 @login_required
@@ -363,4 +492,5 @@ def student_dashboard(request):
         "dashboard.html",
         {"groups": groups, "me_sid": getattr(sp, "sid", "")},
     )
+
 
