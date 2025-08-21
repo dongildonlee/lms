@@ -5,6 +5,5 @@ dj-database-url==2.2.0
 djangorestframework==3.15.2
 reportlab==4.4.3
 psycopg[binary]
-markdown-katex==202406.1035
 markdown==3.6
 weasyprint==61.2
