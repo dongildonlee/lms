@@ -381,21 +381,24 @@ def _render_latex_pdf_from_template(template_name: str, ctx: dict) -> bytes:
         env = os.environ.copy()
         env.setdefault("TEXMFHOME", os.path.join(td, "texmf"))
 
-        # -q (quiet) keeps logs small; remove if you want verbose logs
+        # Prefer modern subcommand first; fall back to legacy syntax.
+        # (No "-q" because your binary does not support it.)
+        cmd_modern = [exe, "-X", "compile", tex_path, "--outdir", td, "--synctex=0", "--keep-logs"]
         proc = subprocess.run(
-            [exe, "-q", "--outdir", td, tex_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=td,
-            env=env,
+            cmd_modern, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=td, env=env
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"tectonic_failed\n{proc.stdout}")
+            cmd_legacy = [exe, tex_path, "--outdir", td, "--synctex=0", "--keep-logs"]
+            proc2 = subprocess.run(
+                cmd_legacy, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=td, env=env
+            )
+            if proc2.returncode != 0:
+                raise RuntimeError(f"tectonic_failed\n{proc.stdout}\n{proc2.stdout}")
 
         pdf_path = os.path.join(td, "doc.pdf")
         with open(pdf_path, "rb") as fh:
             return fh.read()
+
 
 
 def _build_latex_doc(student_id: int, questions) -> str:
