@@ -29,23 +29,40 @@ def _strip_comments_and_textmode_macros(s: str) -> str:
     s = re.sub(r"\\textbf\{([^}]*)\}", r"**\1**", s)  # simple and good enough here
     return _trim(s)
 
-def _parse_nested_choices(block_text: str):
-    parts = re.split(r"(?m)^\s*\\item\b", block_text)
-    parts = [p for p in parts if p.strip()]
+def _parse_nested_choices(block_text):
+    """
+    Return {'A': '...', 'B': '...', ...} from a nested enumerate.
+    Ignores any text before the first \item (e.g. [label=(\Alph*)]).
+    """
+    items = re.findall(
+        r"(?ms)^\s*\\item\b(.*?)(?=^\s*\\item\b|\\end\{enumerate\})",
+        block_text
+    )
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     out = {}
-    for i, p in enumerate(parts):
-        out[letters[i] if i < len(letters) else str(i+1)] = _strip_comments_and_textmode_macros(_trim(p))
+    for i, p in enumerate(items):
+        out[letters[i]] = _trim(p)
     return out
 
+
+
+
 def _split_top_level_items(body: str):
+    """
+    Find the FIRST top-level enumerate and split into item strings.
+    Returns (preamble_text, [item_text1, item_text2, ...]).
+    """
     m = re.search(r"\\begin\{enumerate\}", body)
     if not m:
-        return "", []  # no enumerate found
+        # No enumerate: treat whole body as preamble
+        return _trim(body), []
+
+    preamble = body[:m.start()]
     enum_start = m.start()
 
     depth = 0
     items, current_start, end_index = [], None, None
+
     for tok in ENUM_TOKEN_RE.finditer(body, enum_start):
         beg, end, item = tok.groups()
         if beg:
@@ -65,11 +82,12 @@ def _split_top_level_items(body: str):
             if current_start is not None:
                 items.append(body[current_start:tok.start()])
             current_start = tok.end()
+
     if current_start is not None and end_index is None:
         items.append(body[current_start:len(body)])
 
-    # preamble (everything before first \begin{enumerate}) is intentionally IGNORED
-    return "", [_trim(x) for x in items if x.strip()]
+    return _trim(preamble), [_trim(x) for x in items if x.strip()]
+
 
 def _extract_item_stem_and_choices(item_text: str):
     m = re.search(r"\\begin\{enumerate\}", item_text)
@@ -104,10 +122,19 @@ def _extract_item_stem_and_choices(item_text: str):
     return stem, choices, ans
 
 def parse_tex_file_to_questions(path: Path):
+    """
+    Return a LIST of question dicts extracted from a .tex file.
+
+    Supports:
+      (B) One top-level \begin{enumerate}...\end{enumerate} with many \item,
+          where any preamble (e.g., a TikZ table) that precedes the enumerate
+          is PREPENDED to EVERY item's stem.
+      (A) Single-question file with optional \choice[...] macros and \answer{C}.
+    """
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
-    # meta headers (optional "%% key: value")
+    # --- meta headers (optional: "%% key: value")
     meta, body_start = {}, 0
     for i, line in enumerate(lines):
         m = HEADER_RE.match(line.strip())
@@ -118,23 +145,50 @@ def parse_tex_file_to_questions(path: Path):
             break
 
     body = "\n".join(lines[body_start:]).strip()
-    # find items (ignore preamble entirely)
-    _preamble_ignored, items = _split_top_level_items(body)
-    tags = [t.strip() for t in (meta.get("tags", "").strip().strip("[]")).split(",") if t.strip()]
+
+    # tags
+    tags = []
+    raw_tags = meta.get("tags", "")
+    if raw_tags:
+        raw = raw_tags.strip().strip("[]")
+        tags = [t.strip() for t in raw.split(",") if t.strip()]
+
     qtype = (meta.get("type") or "mcq").lower()
 
+    # --- (B) multi-question enumerate: keep the PREAMBLE
+    preamble, items = _split_top_level_items(body)
     if items:
         out = []
         for it in items:
             stem, choices, ans_inline = _extract_item_stem_and_choices(it)
+            # prepend preamble (table/tikz/etc.) so each item is self-contained
+            full_stem = _trim((preamble + "\n\n" + stem) if preamble else stem)
             correct = (ans_inline or meta.get("answer") or "A").strip().upper()[:1]
-            out.append({"type": qtype, "tags": tags, "answer": correct, "stem_tex": stem, "choices": choices or None})
+            out.append({
+                "type": qtype,
+                "tags": tags,
+                "answer": correct,
+                "stem_tex": full_stem,
+                "choices": choices or None,
+            })
         return out
 
-    # Single-question fallback (rare for you)
-    stem = _strip_comments_and_textmode_macros(body)
-    return [{"type": qtype, "tags": tags, "answer": (meta.get("answer") or "A").strip().upper()[:1],
-             "stem_tex": stem, "choices": None}]
+    # --- (A) single-question fallback with \choice[...] and optional \answer{C}
+    choices = {}
+    for m in CHOICE_MACRO_RE.finditer(body):
+        key = m.group("key").strip()
+        label = _trim(m.group("label"))
+        choices[key] = label
+
+    body_no_ans, ans_inline = _strip_answer_marker(body)
+    return [{
+        "type": qtype,
+        "tags": tags,
+        "answer": (ans_inline or meta.get("answer") or "A").strip().upper()[:1],
+        "stem_tex": _trim(body_no_ans),
+        "choices": choices or None,
+    }]
+
 
 class Command(BaseCommand):
     help = "Import LaTeX questions from a folder"
