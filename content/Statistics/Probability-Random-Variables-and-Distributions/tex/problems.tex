@@ -1,57 +1,62 @@
-% content/Statistics/Probability-Random-Variables-and-Distributions/tex/problems.tex
+%% type: mcq
+%% tags: Statistics, Diagnostic Tests
+%% answer: A   % default; each item sets its own with \answer{...}
 
-{\Large \textbf{Probability, Random Variables, and Distributions}}
-\bigskip
-\noindent\textbf{Directions:} Each question repeats the same table so every item is self-contained.
-
+% -------- PREAMBLE (copied into every item by the importer) ----------
 \[
-\begin{array}{r|cccc}
- & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\
- \text{Row 1} & 12 & 18 & 7 & 9 \\
- \text{Row 2} & 20 & 15 & 11 & 4 \\
- \text{Row 3} & 8  & 6  & 14 & 10
+\begin{array}{c|cc|c}
+   & \text{Strep Throat} & \text{Healthy} & \\ \hline
+\text{Positive test} & 35 & 25 & 60 \\ \hline
+\text{Negative test} &  5 & 435 & 440 \\ \hline
+   & 40 & 460 &
 \end{array}
 \]
 
 \begin{enumerate}[label=\textbf{S\arabic*.}]
 
-% --- S1
-\item \textbf{(Category B)} What is the probability the chosen cell lies in \textbf{column B}? \answer{A}
+% --- S1: Predictive value P(strep | positive)
+\item \textbf{Predictive value.} Probability the person \emph{has strep} given a \emph{positive} test. \answer{B}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{18+15+6}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{18}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{15}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{6}{12+18+7+9+20+15+11+4+8+6+14+10}$
+\item $\dfrac{35}{500}$
+\item $\dfrac{35}{60}$
+\item $\dfrac{35}{40}$
+\item $\dfrac{35}{35+25+5}$
+\item $\dfrac{35+25+5}{500}$
 \end{enumerate}
 
-% --- S2
-\item \textbf{(Conditional on C)} Compute $P(\text{Row 1}\mid \text{column C})$. \answer{A}
+% --- S2: False positive P(positive | no strep)
+\item \textbf{False-positive rate.} Probability of testing positive given the person \emph{does not} have strep. \answer{A}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{7}{7+11+14}$
-\item $\displaystyle \frac{11}{7+11+14}$
-\item $\displaystyle \frac{14}{7+11+14}$
-\item $\displaystyle \frac{7}{12+20+8}$
+\item $\dfrac{25}{460}$
+\item $\dfrac{25}{60}$
+\item $\dfrac{35}{40}$
+\item $\dfrac{25}{500}$
+\item $\dfrac{35+25+5}{500}$
 \end{enumerate}
 
-% --- S3
-\item \textbf{(Column D)} Let $X$ be the column selected uniformly by cell. What is $P(X=D)$? \answer{A}
+% --- S3: Sensitivity P(positive | strep)
+\item \textbf{Sensitivity.} Probability of testing positive given the person \emph{has} strep throat. \answer{E}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{9+4+10}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{9}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{4}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{10}{12+18+7+9+20+15+11+4+8+6+14+10}$
+\item $\dfrac{35+25+5}{500}$
+\item $\dfrac{35}{35+25+5}$
+\item $\dfrac{35}{500}$
+\item $\dfrac{35}{60}$
+\item $\dfrac{35}{40}$
 \end{enumerate}
 
-% --- S4
-\item \textbf{(Row 2, A or D)} Given the entry is from \textbf{Row 2}, find $P(\text{A or D}\mid \text{Row 2})$. \answer{A}
+% --- S4: Specificity P(negative | no strep)
+\item \textbf{Specificity.} Probability of testing negative given the person \emph{does not} have strep throat. \answer{E}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{20+4}{20+15+11+4}$
-\item $\displaystyle \frac{20+11}{20+15+11+4}$
-\item $\displaystyle \frac{15+11}{20+15+11+4}$
-\item $\displaystyle \frac{12+9}{12+18+7+9}$
+\item $\dfrac{5}{40}$
+\item $\dfrac{35}{60}$
+\item $\dfrac{35+5+435}{500}$
+\item $\dfrac{435}{500}$
+\item $\dfrac{435}{460}$
 \end{enumerate}
 
 \end{enumerate}
+
+
 
 
     
