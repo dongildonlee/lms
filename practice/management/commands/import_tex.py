@@ -2,135 +2,86 @@
 import re
 from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth.models import User
 from practice.models import Question, Tag
+from django.contrib.auth.models import User
 
-# ---------------------------------------------------------------------------
-# Header metadata lines (optional, at very top of file)
-#   %% type: mcq
-#   %% tags: Statistics, Probability
-#   %% answer: C
-# ---------------------------------------------------------------------------
 HEADER_RE = re.compile(r"^%%\s*(\w+)\s*:\s*(.+)$")
-
-# Single-question macro-style choices (fallback format)
-CHOICE_MACRO_RE = re.compile(r"\\choice\[(?P<key>[A-Z])\]\{(?P<label>.+?)\}", re.S)
-
-# Robust enumerate tokenization (allowing optional [...] after begin)
-OPEN_ENUM = re.compile(r"\\begin\{enumerate\}(?:\[[^\]]*\])?")
-CLOSE_ENUM = re.compile(r"\\end\{enumerate\}")
-ENUM_TOKEN_RE = re.compile(
-    r"(\\begin\{enumerate\}(?:\[[^\]]*\])?)|(\\end\{enumerate\})|(\\item\b)",
-    re.M,
-)
-
-LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
+ENUM_TOKEN_RE = re.compile(r"(\\begin\{enumerate\})|(\\end\{enumerate\})|(\\item\b)", re.M)
 
 def _trim(s: str) -> str:
     return re.sub(r"\s+\Z", "", re.sub(r"\A\s+", "", s or ""))
 
-
-def _strip_answer_marker(s: str):
-    """
-    Remove optional inline \\answer{C}. Returns (text_without_marker, 'C' or None).
-    """
+def _strip_answer_marker(s):
     m = re.search(r"\\answer\{([A-Z])\}", s)
     if not m:
         return s, None
     ans = m.group(1)
-    s = s[:m.start()] + s[m.end():]
-    return s, ans
+    return s[:m.start()] + s[m.end():], ans
 
+def _strip_comments_and_textmode_macros(s: str) -> str:
+    # drop lines that are pure TeX comments
+    lines = [ln for ln in (s or "").splitlines() if not ln.strip().startswith("%")]
+    s = "\n".join(lines)
+    # strip common text-mode spacing/formatting macros that don't display in the web
+    s = re.sub(r"\\noindent\b", "", s)
+    s = re.sub(r"\\(big|med|small)skip\b", "", s)
+    # leave \textbf inside math; outside math it will show literally, so soften it:
+    s = re.sub(r"\\textbf\{([^}]*)\}", r"**\1**", s)  # simple and good enough here
+    return _trim(s)
 
-def _document_body(text: str) -> str:
-    """
-    If the file is a full LaTeX doc, keep only the content between
-    \\begin{document} ... \\end{document}. Otherwise return text unchanged.
-    """
-    m = re.search(r"\\begin{document}(.*)\\end{document}", text, re.S)
-    return m.group(1).strip() if m else text
-
-
-def _parse_nested_choices(block_text: str) -> dict:
-    """
-    Given the text inside an item's nested enumerate, split top-level \\item's
-    into an ordered { 'A': '...', 'B': '...', ... } dict.
-    """
+def _parse_nested_choices(block_text: str):
     parts = re.split(r"(?m)^\s*\\item\b", block_text)
     parts = [p for p in parts if p.strip()]
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     out = {}
     for i, p in enumerate(parts):
-        lab = LETTERS[i] if i < len(LETTERS) else str(i + 1)
-        out[lab] = _trim(p)
+        out[letters[i] if i < len(letters) else str(i+1)] = _strip_comments_and_textmode_macros(_trim(p))
     return out
 
-
 def _split_top_level_items(body: str):
-    """
-    Find the FIRST top-level enumerate in 'body' and split its top-level \\item's.
-    Returns (preamble_text, [item_text_1, ...]).
-    """
-    m = OPEN_ENUM.search(body)
+    m = re.search(r"\\begin\{enumerate\}", body)
     if not m:
-        return body, []  # no enumerate found
-
-    preamble = body[: m.start()]
+        return "", []  # no enumerate found
     enum_start = m.start()
 
     depth = 0
-    items = []
-    current_start = None
-    end_index = None
-
+    items, current_start, end_index = [], None, None
     for tok in ENUM_TOKEN_RE.finditer(body, enum_start):
         beg, end, item = tok.groups()
-
         if beg:
             depth += 1
             continue
-
         if end:
             if depth == 1:
-                # close the outer enumerate
                 if current_start is not None:
-                    items.append(body[current_start : tok.start()])
+                    items.append(body[current_start:tok.start()])
                     current_start = None
                 end_index = tok.end()
                 depth -= 1
                 break
             depth -= 1
             continue
-
         if item and depth == 1:
             if current_start is not None:
-                items.append(body[current_start : tok.start()])
+                items.append(body[current_start:tok.start()])
             current_start = tok.end()
-
     if current_start is not None and end_index is None:
-        items.append(body[current_start : len(body)])
+        items.append(body[current_start:len(body)])
 
-    return preamble, [_trim(x) for x in items if x.strip()]
-
+    # preamble (everything before first \begin{enumerate}) is intentionally IGNORED
+    return "", [_trim(x) for x in items if x.strip()]
 
 def _extract_item_stem_and_choices(item_text: str):
-    """
-    For one \\item:
-      - stem = text before first nested enumerate
-      - choices = from first nested enumerate (if present)
-      - answer = optional inline \\answer{C} in the stem
-    """
-    m = OPEN_ENUM.search(item_text)
+    m = re.search(r"\\begin\{enumerate\}", item_text)
     if not m:
         stem, ans = _strip_answer_marker(item_text)
-        return _trim(stem), {}, ans
+        return _strip_comments_and_textmode_macros(stem), {}, ans
 
-    stem = item_text[: m.start()]
-    rest = item_text[m.start() :]
+    stem_raw = item_text[:m.start()]
+    rest = item_text[m.start():]
 
     depth = 0
-    start_idx = None
-    end_idx = None
+    start_idx = end_idx = None
     for tok in ENUM_TOKEN_RE.finditer(rest):
         beg, end, itm = tok.groups()
         if beg:
@@ -148,26 +99,16 @@ def _extract_item_stem_and_choices(item_text: str):
         choices_block = rest[start_idx:end_idx]
         choices = _parse_nested_choices(choices_block)
 
-    stem, ans = _strip_answer_marker(stem)
-    return _trim(stem), choices, ans
+    stem_raw, ans = _strip_answer_marker(stem_raw)
+    stem = _strip_comments_and_textmode_macros(stem_raw)
+    return stem, choices, ans
 
-
-def parse_tex_file_to_questions(path: Path) -> list[dict]:
-    """
-    Extract a list of question dicts from a .tex file.
-
-    Supports:
-      (A) One top-level enumerate with many \\item's (each may contain a nested
-          enumerate for choices). Preamble before the enumerate (e.g., a table)
-          is prepended to every item's stem.
-      (B) A single-question body that may use \\choice[A]{...} macros.
-    """
+def parse_tex_file_to_questions(path: Path):
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
-    # Parse optional "%% key: value" headers at the very top
-    meta = {}
-    body_start = 0
+    # meta headers (optional "%% key: value")
+    meta, body_start = {}, 0
     for i, line in enumerate(lines):
         m = HEADER_RE.match(line.strip())
         if m:
@@ -177,67 +118,30 @@ def parse_tex_file_to_questions(path: Path) -> list[dict]:
             break
 
     body = "\n".join(lines[body_start:]).strip()
-    body = _document_body(body)  # keep only content within \begin{document}...\end{document}
-
-    # Tags (comma-list or [list])
-    tags = []
-    raw_tags = meta.get("tags", "")
-    if raw_tags:
-        raw = raw_tags.strip().strip("[]")
-        tags = [t.strip() for t in raw.split(",") if t.strip()]
-
+    # find items (ignore preamble entirely)
+    _preamble_ignored, items = _split_top_level_items(body)
+    tags = [t.strip() for t in (meta.get("tags", "").strip().strip("[]")).split(",") if t.strip()]
     qtype = (meta.get("type") or "mcq").lower()
 
-    # (A) Prefer multi-question enumerate
-    preamble, items = _split_top_level_items(body)
     if items:
         out = []
-        pre = _trim(preamble)
         for it in items:
             stem, choices, ans_inline = _extract_item_stem_and_choices(it)
-            full_stem = _trim((pre + "\n\n" + stem) if pre else stem)
             correct = (ans_inline or meta.get("answer") or "A").strip().upper()[:1]
-            out.append(
-                {
-                    "type": qtype,
-                    "tags": tags,
-                    "answer": correct,
-                    "stem_tex": full_stem,
-                    "choices": choices or None,
-                }
-            )
+            out.append({"type": qtype, "tags": tags, "answer": correct, "stem_tex": stem, "choices": choices or None})
         return out
 
-    # (B) Single-question macro format
-    choices = {}
-    for m in CHOICE_MACRO_RE.finditer(body):
-        key = m.group("key").strip()
-        label = _trim(m.group("label"))
-        choices[key] = label
-
-    body_no_ans, ans_inline = _strip_answer_marker(body)
-    return [
-        {
-            "type": qtype,
-            "tags": tags,
-            "answer": (ans_inline or meta.get("answer") or "A").strip().upper()[:1],
-            "stem_tex": _trim(body_no_ans),
-            "choices": choices or None,
-        }
-    ]
-
-
-# ---------------------------------------------------------------------------
-
+    # Single-question fallback (rare for you)
+    stem = _strip_comments_and_textmode_macros(body)
+    return [{"type": qtype, "tags": tags, "answer": (meta.get("answer") or "A").strip().upper()[:1],
+             "stem_tex": stem, "choices": None}]
 
 class Command(BaseCommand):
-    help = "Import LaTeX questions from a folder (recursively)."
+    help = "Import LaTeX questions from a folder"
 
     def add_arguments(self, parser):
         parser.add_argument("root", type=str, help="Folder containing .tex files")
-        parser.add_argument(
-            "--created-by", type=str, default=None, help="Username to set as author"
-        )
+        parser.add_argument("--created-by", type=str, default=None, help="Username to set as author")
 
     def handle(self, *args, **opts):
         root = Path(opts["root"]).expanduser().resolve()
@@ -249,11 +153,7 @@ class Command(BaseCommand):
             try:
                 created_by = User.objects.get(username=opts["created_by"])
             except User.DoesNotExist:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"User {opts['created_by']} not found; leaving created_by null."
-                    )
-                )
+                self.stdout.write(self.style.WARNING(f"User {opts['created_by']} not found; leaving created_by null."))
 
         files = list(root.rglob("*.tex"))
         if not files:
@@ -262,24 +162,17 @@ class Command(BaseCommand):
 
         total = 0
         for f in files:
-            try:
-                questions = parse_tex_file_to_questions(f)
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Parse error in {f}: {e}"))
-                continue
-
-            for data in questions:
+            for data in parse_tex_file_to_questions(f):
                 q = Question.objects.create(
                     type=data["type"],
-                    stem_md=data["stem_tex"],            # MathJax-friendly TeX on web
-                    choices=data["choices"] or {},       # multiple-choice options
-                    correct={"choice": data["answer"]},  # simple MCQ key
+                    stem_md=data["stem_tex"],
+                    choices=data["choices"] or {},
+                    correct={"choice": data["answer"]},
                     created_by=created_by,
                 )
                 for tag_name in data["tags"]:
                     t, _ = Tag.objects.get_or_create(name=tag_name)
                     q.tags.add(t)
-
                 total += 1
                 self.stdout.write(f"Imported Q{q.id} from {f.relative_to(root)}")
 
