@@ -270,11 +270,12 @@ def get_questions(request):
             out.append({
                 "id": q.id,
                 "type": q.type,
-                "stem_md": _norm(q.stem_md or ""),
-                "choices": {k: _norm(v) for k, v in (q.choices or {}).items()},
+                "stem_md": q.stem_md or "",              # RAW (no _norm)
+                "choices": (q.choices or {}),            # RAW (no per-choice _norm)
                 "version": q.version,
                 "tags": list(q.tags.values_list("name", flat=True)),
             })
+
 
         return Response({"count": len(out), "questions": out})
     except Exception as e:
