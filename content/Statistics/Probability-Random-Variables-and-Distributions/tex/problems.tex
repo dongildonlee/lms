@@ -7,7 +7,7 @@
 
 \begin{document}
 
-% -------- preamble (will be prepended to each question by the importer) ------
+%========= Preamble (this is prepended to each question by the importer) =========
 \begin{center}
 \begin{tikzpicture}[x=1cm,y=1cm]
   % Column titles
@@ -40,23 +40,70 @@
 \end{center}
 
 \bigskip
-% ---------------------------------------------------------------------------
+%===============================================================================
 
 \begin{enumerate}[label=\textbf{S\arabic*.}]
 
-\item \textbf{Predictive value.} What is the probability that a person has strep throat \emph{and} tests positive? \answer{B}
+% --- S1 ------------------------------------------------------------------------
+\item \textbf{Predictive value.} What is the probability that a person has strep
+throat \emph{and} tests positive? \answer{B}
 
-  \begin{enumerate}[label=(\Alph*)]
-    \item $\dfrac{35}{500}$
-    \item $\dfrac{35}{60}$
-    \item $\dfrac{35}{40}$
-    \item $\dfrac{35}{35+25+5}$
-    \item $\dfrac{35+25+5}{500}$
-  \end{enumerate}
+\textit{Use the same table above.}
+
+\begin{enumerate}
+  \item $\dfrac{35}{500}$
+  \item $\dfrac{35}{60}$
+  \item $\dfrac{35}{40}$
+  \item $\dfrac{35}{35+25+5}$
+  \item $\dfrac{35+25+5}{500}$
+\end{enumerate}
+
+% --- S2 ------------------------------------------------------------------------
+\item \textbf{False-positive rate.} What is the probability of testing positive
+\emph{given} that the person does \emph{not} have strep throat? \answer{A}
+
+\textit{Use the same table above.}
+
+\begin{enumerate}
+  \item $\dfrac{25}{460}$
+  \item $\dfrac{25}{60}$
+  \item $\dfrac{35}{40}$
+  \item $\dfrac{25}{500}$
+  \item $\dfrac{35+25+5}{500}$
+\end{enumerate}
+
+% --- S3 ------------------------------------------------------------------------
+\item \textbf{Sensitivity.} What is the probability of testing positive
+\emph{given} that the person \emph{has} strep throat? \answer{D}
+
+\textit{Use the same table above.}
+
+\begin{enumerate}
+  \item $\dfrac{35+25+5}{500}$
+  \item $\dfrac{35}{35+25+5}$
+  \item $\dfrac{35}{500}$
+  \item $\dfrac{35}{40}$    % correct
+  \item $\dfrac{35}{60}$
+\end{enumerate}
+
+% --- S4 ------------------------------------------------------------------------
+\item \textbf{Specificity.} What is the probability of testing negative
+\emph{given} that the person does \emph{not} have strep throat? \answer{E}
+
+\textit{Use the same table above.}
+
+\begin{enumerate}
+  \item $\dfrac{5}{40}$
+  \item $\dfrac{35}{60}$
+  \item $\dfrac{35+5+435}{500}$
+  \item $\dfrac{435}{500}$
+  \item $\dfrac{435}{460}$   % correct
+\end{enumerate}
 
 \end{enumerate}
 
 \end{document}
+
 
 
 

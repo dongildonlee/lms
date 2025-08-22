@@ -4,6 +4,13 @@ from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+# --- LaTeX asset fields ---
+content_hash      = models.CharField(max_length=64, blank=True, default="")
+asset_hash        = models.CharField(max_length=64, blank=True, default="")
+asset_relpath     = models.CharField(max_length=255, blank=True, default="")  # e.g. q/57/abc123.svg
+asset_format      = models.CharField(max_length=8, blank=True, default="svg") # 'svg' (or 'png')
+needs_asset_render = models.BooleanField(default=False)
+
 
 class Classroom(models.Model):
     name = models.CharField(max_length=200)
