@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views_tex import tex_pdf
 
 urlpatterns = [
     path("", views.practice_page, name="practice"),
@@ -29,6 +30,11 @@ urlpatterns = [
     path("accounts/register/", views.register, name="register"),
 
     path("tex/svg/", views.tex_svg, name="tex_svg"),
+
+    # www.moonshotlab.ai
+    path("assets/q/<int:pk>.<str:fmt>", views.question_asset, name="question_asset"),
+
+    path("practice/tex/pdf/", tex_pdf, name="tex_pdf"),
 ]
 
 
