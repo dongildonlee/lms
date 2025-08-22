@@ -1,57 +1,84 @@
-% content/Statistics/Probability-Random-Variables-and-Distributions/tex/problems.tex
+%% type: mcq
+%% tags: Statistics, Diagnostic Tests
+%% answer: A
 
-{\Large \textbf{Probability, Random Variables, and Distributions}}
-\bigskip
-\noindent\textbf{Directions:} Each question repeats the same table so every item is self-contained.
-
-\[
-\begin{array}{r|cccc}
- & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\
- \text{Row 1} & 12 & 18 & 7 & 9 \\
- \text{Row 2} & 20 & 15 & 11 & 4 \\
- \text{Row 3} & 8  & 6  & 14 & 10
-\end{array}
-\]
+<!-- BEGIN: shared table preamble (copied into each item) -->
+<div style="display:inline-block; margin:0.5rem 0;">
+  <table style="border-collapse:collapse; font-size:16px;">
+    <tr>
+      <td style="padding:6px;"></td>
+      <th style="border:2px solid #444; padding:6px 12px;">Strep Throat</th>
+      <th style="border:2px solid #444; padding:6px 12px;">Healthy</th>
+      <td style="padding:6px;"></td>
+    </tr>
+    <tr>
+      <th style="border:2px solid #444; padding:6px 12px; text-align:left;">Positive test</th>
+      <td style="border:2px solid #444; padding:6px 12px; text-align:center;">35</td>
+      <td style="border:2px solid #444; padding:6px 12px; text-align:center;">25</td>
+      <td style="padding:6px 12px; text-align:center;">60</td>
+    </tr>
+    <tr>
+      <th style="border:2px solid #444; padding:6px 12px; text-align:left;">Negative test</th>
+      <td style="border:2px solid #444; padding:6px 12px; text-align:center;">5</td>
+      <td style="border:2px solid #444; padding:6px 12px; text-align:center;">435</td>
+      <td style="padding:6px 12px; text-align:center;">440</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 12px;"></td>
+      <td style="padding:6px 12px; text-align:center;">40</td>
+      <td style="padding:6px 12px; text-align:center;">460</td>
+      <td style="padding:6px 12px;"></td>
+    </tr>
+  </table>
+</div>
+<!-- END: shared table preamble -->
 
 \begin{enumerate}[label=\textbf{S\arabic*.}]
 
-% --- S1
-\item \textbf{(Category B)} What is the probability the chosen cell lies in \textbf{column B}? \answer{A}
+% --- S1 (predictive value)
+\item \textbf{Predictive value.} Probability the person has strep given a positive test. \answer{B}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{18+15+6}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{18}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{15}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{6}{12+18+7+9+20+15+11+4+8+6+14+10}$
+\item $\dfrac{35}{500}$
+\item $\dfrac{35}{60}$
+\item $\dfrac{35}{40}$
+\item $\dfrac{35}{35+25+5}$
+\item $\dfrac{35+25+5}{500}$
 \end{enumerate}
 
-% --- S2
-\item \textbf{(Conditional on C)} Compute $P(\text{Row 1}\mid \text{column C})$. \answer{A}
+% --- S2 (false positive)
+\item \textbf{False-positive rate.} Probability of positive test given no strep. \answer{A}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{7}{7+11+14}$
-\item $\displaystyle \frac{11}{7+11+14}$
-\item $\displaystyle \frac{14}{7+11+14}$
-\item $\displaystyle \frac{7}{12+20+8}$
+\item $\dfrac{25}{460}$
+\item $\dfrac{25}{60}$
+\item $\dfrac{35}{40}$
+\item $\dfrac{25}{500}$
+\item $\dfrac{35+25+5}{500}$
 \end{enumerate}
 
-% --- S3
-\item \textbf{(Column D)} Let $X$ be the column selected uniformly by cell. What is $P(X=D)$? \answer{A}
+% --- S3 (sensitivity)
+\item \textbf{Sensitivity.} Probability of positive test given strep. \answer{E}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{9+4+10}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{9}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{4}{12+18+7+9+20+15+11+4+8+6+14+10}$
-\item $\displaystyle \frac{10}{12+18+7+9+20+15+11+4+8+6+14+10}$
+\item $\dfrac{35+25+5}{500}$
+\item $\dfrac{35}{35+25+5}$
+\item $\dfrac{35}{500}$
+\item $\dfrac{35}{60}$
+\item $\dfrac{35}{40}$
 \end{enumerate}
 
-% --- S4
-\item \textbf{(Row 2, A or D)} Given the entry is from \textbf{Row 2}, find $P(\text{A or D}\mid \text{Row 2})$. \answer{A}
+% --- S4 (specificity)
+\item \textbf{Specificity.} Probability of negative test given no strep. \answer{E}
 \begin{enumerate}[label=(\Alph*)]
-\item $\displaystyle \frac{20+4}{20+15+11+4}$
-\item $\displaystyle \frac{20+11}{20+15+11+4}$
-\item $\displaystyle \frac{15+11}{20+15+11+4}$
-\item $\displaystyle \frac{12+9}{12+18+7+9}$
+\item $\dfrac{5}{40}$
+\item $\dfrac{35}{60}$
+\item $\dfrac{35+5+435}{500}$
+\item $\dfrac{435}{500}$
+\item $\dfrac{435}{460}$
 \end{enumerate}
 
 \end{enumerate}
+
+
+
 
 
     
