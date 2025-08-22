@@ -5,8 +5,10 @@ from .models import (
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
-    list_display = ("name",)
-    search_fields = ("name",)
+    list_display = ("name", "parent")                 # show parent column
+    search_fields = ("name", "parent__name")
+    list_filter = ("parent",)                         # filter by parent
+    autocomplete_fields = ("parent",)
 
 @admin.register(StudentProfile)
 class StudentProfileAdmin(admin.ModelAdmin):
