@@ -16,6 +16,9 @@
 
   /* Ensure readable dark text inside the card */
   #qCard, #qCard * { color: #0f172a; } /* ink */
+
+  /* Make server-rendered LaTeX SVGs behave nicely */
+  img.latex-svg { max-width: 100%; height: auto; display: inline-block; vertical-align: middle; }
 </style>
 
 <!-- Card uses dark text explicitly -->
@@ -35,7 +38,7 @@
          focus:outline-none focus:ring-2 focus:ring-blue-500/30
          motion-reduce:transform-none motion-reduce:transition-none">
       Next ▶
-  </button>
+    </button>
 
     <a href="/dashboard/"
        class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition">
@@ -58,6 +61,8 @@ function qp(name){
   return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
 }
 
+/* Keep your original normalizer for plain/MathJax content only.
+   IMPORTANT: we DO NOT run this on full-LaTeX snippets that the server compiles. */
 function normalizeTex(s){
   if(!s) return '';
   return s.replace(/<br\s*\/?>/gi,' ')
@@ -65,6 +70,12 @@ function normalizeTex(s){
           .replace(/\s*\n+\s*/g,' ')
           .replace(/\s{2,}/g,' ')
           .trim();
+}
+
+/* NEW: detect when a snippet needs a real LaTeX engine (tabular, tikz, tcolorbox, align, pgfplots, etc.) */
+function needsFullLaTeX(s){
+  if(!s) return false;
+  return /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics|\\pgfplotstableread/.test(s);
 }
 
 function getCookie(name){
@@ -112,29 +123,46 @@ async function loadQuestion(tag){
     }
 
     currentQ = qRes.questions[0];
-    $('#stem').innerHTML = normalizeTex(currentQ.stem_md);
 
+    // --- STEM ---
+    const rawStem = currentQ.stem_md || '';
+    if(needsFullLaTeX(rawStem)){
+      // Server-compile to Overleaf-quality SVG; DO NOT normalize
+      const url = `/practice/tex/svg/?tex=${encodeURIComponent(rawStem)}`;
+      $('#stem').innerHTML = `<img class="latex-svg" alt="problem" src="${url}">`;
+    }else{
+      // Plain/MathJax path (keep your original normalization)
+      $('#stem').innerHTML = normalizeTex(rawStem);
+    }
+
+    // --- CHOICES ---
     const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
     const choices = currentQ.choices || {};
     for(const [key,label] of Object.entries(choices)){
+      const rawLabel = label || '';
       const btn = document.createElement('button');
-      // Force dark, legible text on choices
       btn.className = `
-      w-full text-left rounded-xl px-4 py-3
-      border border-gray-200 bg-white/90 text-ink/90
-      transition duration-200 ease-out transform
-      hover:-translate-y-0.5 hover:shadow-md hover:bg-white
-      focus:outline-none focus:ring-2 focus:ring-blue-500/30
-      active:translate-y-0
-      motion-reduce:transform-none motion-reduce:transition-none
-    `.replace(/\s+/g,' ').trim();
-      btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(label)}`;
+        w-full text-left rounded-xl px-4 py-3
+        border border-gray-200 bg-white/90 text-ink/90
+        transition duration-200 ease-out transform
+        hover:-translate-y-0.5 hover:shadow-md hover:bg-white
+        focus:outline-none focus:ring-2 focus:ring-blue-500/30
+        active:translate-y-0
+        motion-reduce:transform-none motion-reduce:transition-none
+      `.replace(/\s+/g,' ').trim();
+
+      if(needsFullLaTeX(rawLabel)){
+        const url = `/practice/tex/svg/?tex=${encodeURIComponent(rawLabel)}`;
+        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span><img class="latex-svg" alt="choice ${key}" src="${url}">`;
+      }else{
+        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(rawLabel)}`;
+      }
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
     }
 
     $('#feedback').textContent = ''; $('#status').textContent = '';
-    await typeset();
+    await typeset(); // harmless when images are used; needed for MathJax cases
   }catch(err){
     $('#status').textContent = `Failed to load question: ${err.message}`;
     $('#stem').innerHTML = ''; $('#choices').innerHTML = ''; $('#feedback').textContent = '';
@@ -161,6 +189,7 @@ $('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
 document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 {% endblock %}
+
 
 
 

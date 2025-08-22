@@ -27,6 +27,8 @@ urlpatterns = [
 
     # Signup page
     path("accounts/register/", views.register, name="register"),
+
+    path("tex/svg/", views.tex_svg, name="tex_svg"),
 ]
 
 

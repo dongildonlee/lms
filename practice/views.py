@@ -5,8 +5,10 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render, redirect
 from django.middleware.csrf import get_token
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_GET
+from django.conf import settings
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -19,13 +21,14 @@ import os
 import tempfile
 import subprocess
 import shutil, logging
+import hashlib
 
 from django.db.models.functions import Random
 
 from .models import Question, Attempt, AttemptItem, Tag
 from .forms import StudentSignupForm
 from django.template.loader import render_to_string
-
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -497,3 +500,135 @@ def student_dashboard(request):
     )
 
 
+def _tectonic_path():
+    """Return path to tectonic binary (./bin or PATH)."""
+    local = os.path.join(settings.BASE_DIR, "bin", "tectonic")
+    if os.path.isfile(local) and os.access(local, os.X_OK):
+        return local
+    return shutil.which("tectonic")
+
+# Where to cache compiled images (put this under STATIC or MEDIA)
+TEXCACHE_DIR = Path(settings.BASE_DIR) / "static" / "texcache"
+TEXCACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+_STANDALONE_PREAMBLE = r"""
+\documentclass[preview,border=2pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs}
+\usepackage{tikz,pgfplots,tcolorbox}
+\pgfplotsset{compat=1.18}
+\begin{document}
+%s
+\end{document}
+"""
+
+# Heuristic: if the snippet uses environments that MathJax can't render, we want full LaTeX.
+_NEEDS_FULL_LATEX_RE = re.compile(
+    r"\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics|\\pgfplotstableread",
+    re.I
+)
+
+@require_GET
+def tex_svg(request):
+    """
+    Compile a LaTeX snippet to SVG (Overleaf-quality) using Tectonic + pdftocairo.
+    GET params:
+      - tex: URL-encoded LaTeX snippet (recommended for small snippets)
+      - qid: optional, to pull Question.stem_md from DB instead
+    Returns: image/svg+xml (or image/png fallback)
+    """
+    # --- NEW: light forbid regex (tectonic disables shell-escape already) ---
+    _FORBID_RE = re.compile(r"\\(write|openout|input\s*\{[^}]*\}|usepackage\[.*?\]\{shellesc\})", re.I)
+
+    tex = request.GET.get("tex")
+    if not tex and (qid := request.GET.get("qid")):
+        try:
+            q = Question.objects.get(pk=int(qid))
+        except (ValueError, Question.DoesNotExist):
+            return HttpResponseBadRequest("bad qid")
+        tex = q.stem_md or ""
+
+    if not tex:
+        return HttpResponseBadRequest("missing tex")
+
+    # --- NEW: block a few risky primitives ---
+    if _FORBID_RE.search(tex):
+        return HttpResponse("forbidden_tex", status=400)
+
+    # Hash for caching
+    h = hashlib.sha1(tex.encode("utf-8")).hexdigest()
+    svg_path = TEXCACHE_DIR / f"{h}.svg"
+    png_path = TEXCACHE_DIR / f"{h}.png"
+
+    # Serve cached if present (with long cache headers)
+    if svg_path.exists():
+        resp = FileResponse(open(svg_path, "rb"), content_type="image/svg+xml")
+        resp["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+    if png_path.exists():
+        resp = FileResponse(open(png_path, "rb"), content_type="image/png")
+        resp["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
+    exe = _tectonic_path()
+    if not exe:
+        return HttpResponse("tectonic_not_found", status=500)
+
+    # Wrap in standalone document
+    wrapper = _STANDALONE_PREAMBLE % tex
+
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            tex_file = Path(td) / "doc.tex"
+            tex_file.write_text(wrapper, encoding="utf-8")
+
+            env = os.environ.copy()
+            env.setdefault("TEXMFHOME", str(Path(td) / "texmf"))
+
+            # Compile to PDF with Tectonic (modern CLI first, fall back to legacy)
+            cmd_modern = [exe, "-X", "compile", str(tex_file), "--outdir", td, "--synctex=0", "--keep-logs"]
+            proc = subprocess.run(cmd_modern, cwd=td, env=env, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, text=True, timeout=30)
+            if proc.returncode != 0:
+                cmd_legacy = [exe, str(tex_file), "--outdir", td, "--synctex=0", "--keep-logs"]
+                proc2 = subprocess.run(cmd_legacy, cwd=td, env=env, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, text=True, timeout=30)
+                if proc2.returncode != 0:
+                    return HttpResponse("tectonic_failed:\n"+proc.stdout+"\n"+proc2.stdout,
+                                        status=422, content_type="text/plain")
+
+            pdf = Path(td) / "doc.pdf"
+
+            # Try PDF -> SVG via poppler (pdftocairo). One page expected due to standalone.
+            svg_tmp = Path(td) / "doc.svg"
+            rc = subprocess.run(["pdftocairo", "-svg", str(pdf), str(svg_tmp)],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).returncode
+            if rc == 0 and svg_tmp.exists():
+                TEXCACHE_DIR.mkdir(parents=True, exist_ok=True)
+                # --- NEW: atomic write to avoid race on concurrent requests ---
+                tmp_out = svg_path.with_suffix(".svg.tmp")
+                tmp_out.write_bytes(svg_tmp.read_bytes())
+                tmp_out.replace(svg_path)
+                resp = FileResponse(open(svg_path, "rb"), content_type="image/svg+xml")
+                resp["Cache-Control"] = "public, max-age=31536000, immutable"
+                return resp
+
+            # Fallback to PNG (pdftoppm)
+            png_tmp = Path(td) / "doc"
+            rc = subprocess.run(["pdftoppm", "-png", "-singlefile", "-rx", "200", "-ry", "200",
+                                 str(pdf), str(png_tmp)],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).returncode
+            png_file = png_tmp.with_suffix(".png")
+            if rc == 0 and png_file.exists():
+                TEXCACHE_DIR.mkdir(parents=True, exist_ok=True)
+                tmp_out = png_path.with_suffix(".png.tmp")
+                tmp_out.write_bytes(png_file.read_bytes())
+                tmp_out.replace(png_path)
+                resp = FileResponse(open(png_path, "rb"), content_type="image/png")
+                resp["Cache-Control"] = "public, max-age=31536000, immutable"
+                return resp
+
+            return HttpResponse("convert_failed", status=500, content_type="text/plain")
+    except subprocess.TimeoutExpired:
+        return HttpResponse("latex_timeout", status=504, content_type="text/plain")
