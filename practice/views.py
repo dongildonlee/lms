@@ -5,7 +5,7 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render, redirect
 from django.middleware.csrf import get_token
-from django.http import FileResponse, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, HttpResponse, HttpResponseBadRequest, Http404
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET
 from django.conf import settings
@@ -632,3 +632,16 @@ def tex_svg(request):
             return HttpResponse("convert_failed", status=500, content_type="text/plain")
     except subprocess.TimeoutExpired:
         return HttpResponse("latex_timeout", status=504, content_type="text/plain")
+
+def question_asset(request, pk: int, fmt: str = "svg"):
+    q = Question.objects.filter(pk=pk).first()
+    if not q or not q.asset_relpath:
+        raise Http404("No asset")
+    # only serve correct format
+    if (q.asset_format or "svg") != fmt:
+        raise Http404("Format mismatch")
+    abs_path = os.path.join(settings.ASSET_ROOT, q.asset_relpath)
+    if not os.path.isfile(abs_path):
+        raise Http404("Asset missing")
+    ctype = "image/svg+xml" if fmt == "svg" else "image/png"
+    return FileResponse(open(abs_path, "rb"), content_type=ctype)
