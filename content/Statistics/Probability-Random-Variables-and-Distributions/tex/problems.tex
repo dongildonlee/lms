@@ -14,21 +14,17 @@
 \bigskip
 \noindent\textbf{Directions:} Each question repeats the same table so every item is self-contained.
 
-\[
-\begin{array}{l|cccc}
- & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\\hline
-\text{Row 1} & 12 & 18 & 7 & 9 \\
-\text{Row 2} & 20 & 15 & 11 & 4 \\
-\text{Row 3} & 8  & 6  & 14 & 10
-\end{array}
-\]
-
 \begin{enumerate}[label=\textbf{S\arabic*.}]
 
 % --- S1
 \item \textbf{(Category B)} What is the probability a uniformly chosen entry lies in \textbf{Category B}?
 \[
-\text{Use the same table above.}
+\begin{array}{c|cccc}
+  & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\\hline
+  \text{Row 1} & 12 & 18 & 7  & 9  \\
+  \text{Row 2} & 20 & 15 & 11 & 4  \\
+  \text{Row 3} & 8  & 6  & 14 & 10
+\end{array}
 \]
 \begin{enumerate}[label=(\Alph*)]
 \item $\dfrac{18+15+6}{12+18+7+9+20+15+11+4+8+6+14+10}$
@@ -40,7 +36,12 @@
 % --- S2
 \item \textbf{(Conditional on C)} Compute $P(\text{Row 1}\mid \text{Category C})$.
 \[
-\text{Use the same table above.}
+\begin{array}{c|cccc}
+  & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\\hline
+  \text{Row 1} & 12 & 18 & 7  & 9  \\
+  \text{Row 2} & 20 & 15 & 11 & 4  \\
+  \text{Row 3} & 8  & 6  & 14 & 10
+\end{array}
 \]
 \begin{enumerate}[label=(\Alph*)]
 \item $\dfrac{7}{7+11+14}$
@@ -52,7 +53,12 @@
 % --- S3
 \item \textbf{(Column D)} Let $X$ be the column label selected uniformly by cell. What is $P(X=D)$?
 \[
-\text{Use the same table above.}
+\begin{array}{c|cccc}
+  & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\\hline
+  \text{Row 1} & 12 & 18 & 7  & 9  \\
+  \text{Row 2} & 20 & 15 & 11 & 4  \\
+  \text{Row 3} & 8  & 6  & 14 & 10
+\end{array}
 \]
 \begin{enumerate}[label=(\Alph*)]
 \item $\dfrac{9+4+10}{12+18+7+9+20+15+11+4+8+6+14+10}$
@@ -64,7 +70,12 @@
 % --- S4
 \item \textbf{(Row 2, A or D)} Given the entry is from \textbf{Row 2}, find $P(\text{Category A or D}\mid \text{Row 2})$.
 \[
-\text{Use the same table above.}
+\begin{array}{c|cccc}
+  & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\\hline
+  \text{Row 1} & 12 & 18 & 7  & 9  \\
+  \text{Row 2} & 20 & 15 & 11 & 4  \\
+  \text{Row 3} & 8  & 6  & 14 & 10
+\end{array}
 \]
 \begin{enumerate}[label=(\Alph*)]
 \item $\dfrac{20+4}{20+15+11+4}$
@@ -76,6 +87,7 @@
 \end{enumerate}
 
 \end{document}
+
 
 
 
