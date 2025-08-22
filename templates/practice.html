@@ -6,63 +6,43 @@
   Practice <span id="subjectLabel" class="text-gray-300 text-lg"></span>
 </h1>
 
-<!-- MathJax layout tweaks (scoped to this page) + legible colors -->
 <style>
-  /* Keep TeX inline by default */
   #qCard mjx-container { line-height: 1.6; }
   #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
   #qCard mjx-container:not([display="true"]) { display:inline; }
-  #qCard mjx-container * { display:inline !important; white-space:normal !important; }
-
-  /* Ensure readable dark text inside the card */
-  #qCard, #qCard * { color: #0f172a; } /* ink */
-
-  /* Make server-rendered LaTeX SVGs behave nicely */
-  img.latex-svg { max-width: 100%; height: auto; display: inline-block; vertical-align: middle; }
+  #qCard, #qCard * { color:#0f172a; } /* dark ink */
+  .latex-pdf { width:100%; height:220px; border:0; display:block; }
+  .latex-pdf.choice { height:64px; } /* smaller for options */
 </style>
 
-<!-- Card uses dark text explicitly -->
-<div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden text-ink">
+<div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
   <div id="stem" class="text-lg mb-4 whitespace-normal leading-7"></div>
-
   <div id="choices" class="space-y-2"></div>
-
   <div id="feedback" class="mt-4 font-semibold"></div>
-
   <div class="mt-6 flex items-center gap-3">
-    <button id="nextBtn"
-      class="inline-flex items-center justify-center px-4 py-2 rounded-xl
-         border border-gray-200 bg-white/90 text-ink
-         transition duration-200 ease-out transform
-         hover:-translate-y-0.5 hover:shadow-md hover:bg-white
-         focus:outline-none focus:ring-2 focus:ring-blue-500/30
-         motion-reduce:transform-none motion-reduce:transition-none">
+    <button id="nextBtn" class="inline-flex items-center justify-center px-4 py-2 rounded-xl
+      border border-gray-200 bg-white/90 text-ink transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
       Next ▶
     </button>
-
-    <a href="/dashboard/"
-       class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition">
+    <a href="/dashboard/" class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700">
       Back to Dashboard
     </a>
   </div>
 </div>
 
-<!-- Status stays readable over dark bg -->
 <div id="status" class="mt-4 text-white/80"></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const $ = (sel) => document.querySelector(sel);
-let attemptId = null, currentQ = null;
+const $ = s => document.querySelector(s);
+let attemptId=null, currentQ=null;
 
 function qp(name){
   const m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
   return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
 }
 
-/* Keep your original normalizer for plain/MathJax content only.
-   IMPORTANT: we DO NOT run this on full-LaTeX snippets that the server compiles. */
 function normalizeTex(s){
   if(!s) return '';
   return s.replace(/<br\s*\/?>/gi,' ')
@@ -72,10 +52,8 @@ function normalizeTex(s){
           .trim();
 }
 
-/* NEW: detect when a snippet needs a real LaTeX engine (tabular, tikz, tcolorbox, align, pgfplots, etc.) */
 function needsFullLaTeX(s){
-  if(!s) return false;
-  return /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics|\\pgfplotstableread/.test(s);
+  return !!s && /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics/.test(s);
 }
 
 function getCookie(name){
@@ -85,7 +63,7 @@ function getCookie(name){
 const csrftoken = getCookie('csrftoken');
 
 async function api(url, opts={}){
-  const o = Object.assign({ headers:{} }, opts);
+  const o = Object.assign({headers:{}}, opts);
   if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
   if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
   const res = await fetch(url, o);
@@ -94,22 +72,19 @@ async function api(url, opts={}){
 }
 
 async function typeset(){
-  const card = $('#qCard');
-  if(window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
+  if(window.MathJax?.typesetPromise) await MathJax.typesetPromise([$('#qCard')]);
 }
 
 async function startPractice(){
   const tag = qp('tag');
-  if(!tag){ location.href = '/dashboard/'; return; }
+  if(!tag){ location.href='/dashboard/'; return; }
   $('#subjectLabel').textContent = '— ' + tag;
 
   try{
     const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
     attemptId = data.attempt_id;
     await loadQuestion(tag);
-  }catch(err){
-    $('#status').textContent = `Failed to start: ${err.message}`;
-  }
+  }catch(err){ $('#status').textContent = `Failed to start: ${err.message}`; }
 }
 
 async function loadQuestion(tag){
@@ -121,48 +96,36 @@ async function loadQuestion(tag){
       $('#choices').innerHTML = ''; $('#feedback').textContent=''; $('#status').textContent='';
       await typeset(); return;
     }
-
     currentQ = qRes.questions[0];
 
-    // --- STEM ---
-    const rawStem = currentQ.stem_md || '';
-    if(needsFullLaTeX(rawStem)){
-      // Server-compile to Overleaf-quality SVG; DO NOT normalize
-      const url = `/practice/tex/svg/?tex=${encodeURIComponent(rawStem)}`;
-      $('#stem').innerHTML = `<img class="latex-svg" alt="problem" src="${url}">`;
+    // STEM
+    const stem = currentQ.stem_md || '';
+    if(needsFullLaTeX(stem)){
+      const src = `/practice/tex/pdf/?tex=${encodeURIComponent(stem)}`;
+      $('#stem').innerHTML = `<object class="latex-pdf" data="${src}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf"></object>`;
     }else{
-      // Plain/MathJax path (keep your original normalization)
-      $('#stem').innerHTML = normalizeTex(rawStem);
+      $('#stem').innerHTML = normalizeTex(stem);
     }
 
-    // --- CHOICES ---
+    // CHOICES
     const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
     const choices = currentQ.choices || {};
     for(const [key,label] of Object.entries(choices)){
-      const rawLabel = label || '';
+      const raw = label || '';
       const btn = document.createElement('button');
-      btn.className = `
-        w-full text-left rounded-xl px-4 py-3
-        border border-gray-200 bg-white/90 text-ink/90
-        transition duration-200 ease-out transform
-        hover:-translate-y-0.5 hover:shadow-md hover:bg-white
-        focus:outline-none focus:ring-2 focus:ring-blue-500/30
-        active:translate-y-0
-        motion-reduce:transform-none motion-reduce:transition-none
-      `.replace(/\s+/g,' ').trim();
-
-      if(needsFullLaTeX(rawLabel)){
-        const url = `/practice/tex/svg/?tex=${encodeURIComponent(rawLabel)}`;
-        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span><img class="latex-svg" alt="choice ${key}" src="${url}">`;
+      btn.className = "w-full text-left rounded-xl px-4 py-3 border border-gray-200 bg-white/90 hover:shadow-md";
+      if(needsFullLaTeX(raw)){
+        const src = `/practice/tex/pdf/?tex=${encodeURIComponent(raw)}`;
+        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span>
+                         <object class="latex-pdf choice" data="${src}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf"></object>`;
       }else{
-        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(rawLabel)}`;
+        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(raw)}`;
       }
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
     }
-
     $('#feedback').textContent = ''; $('#status').textContent = '';
-    await typeset(); // harmless when images are used; needed for MathJax cases
+    await typeset();
   }catch(err){
     $('#status').textContent = `Failed to load question: ${err.message}`;
     $('#stem').innerHTML = ''; $('#choices').innerHTML = ''; $('#feedback').textContent = '';
@@ -178,7 +141,8 @@ async function submitAnswer(choiceKey){
     });
     const ok = !!res.is_correct;
     $('#feedback').textContent = ok ? '✅ Correct' : '❌ Incorrect';
-    $('#feedback').className = ok ? 'mt-4 font-semibold text-green-600' : 'mt-4 font-semibold text-red-600';
+    $('#feedback').className = ok ? 'mt-4 font-semibold text-green-600'
+                                  : 'mt-4 font-semibold text-red-600';
   }catch(err){
     $('#feedback').textContent = `Submit failed: ${err.message}`;
     $('#feedback').className = 'mt-4 font-semibold text-red-600';
@@ -189,6 +153,8 @@ $('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
 document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 {% endblock %}
+
+
 
 
 
