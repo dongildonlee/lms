@@ -1,29 +1,23 @@
-\documentclass[12pt]{article}
+% content/Statistics/Probability-Random-Variables-and-Distributions/tex/problems.tex
 
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb}
-\usepackage{enumitem}
-
-\setlength{\parskip}{0.5em}
-\setlength{\parindent}{0pt}
-
-\begin{document}
-
-{\LARGE \textbf{Probability, Random Variables, and Distributions}}
-
+{\Large \textbf{Probability, Random Variables, and Distributions}}
 \bigskip
-\noindent\textbf{Directions:} For the following four questions, consider a $3\times 4$ grid of nonnegative counts.
-Columns are labeled $\mathbf A,\mathbf B,\mathbf C,\mathbf D$.
-Row 1 has counts $(12,18,7,9)$, Row 2 has $(20,15,11,4)$, Row 3 has $(8,6,14,10)$.
-A single cell is chosen uniformly at random from the $3\times4=12$ cells.
-(You do \emph{not} need the grid itself—the numbers above are all that’s needed.)
+\noindent\textbf{Directions:} Each question repeats the same table so every item is self-contained.
+
+\[
+\begin{array}{r|cccc}
+ & \mathbf{A} & \mathbf{B} & \mathbf{C} & \mathbf{D} \\
+ \text{Row 1} & 12 & 18 & 7 & 9 \\
+ \text{Row 2} & 20 & 15 & 11 & 4 \\
+ \text{Row 3} & 8  & 6  & 14 & 10
+\end{array}
+\]
 
 \begin{enumerate}[label=\textbf{S\arabic*.}]
 
 % --- S1
-\item \textbf{(Category B)} What is the probability the chosen cell lies in \textbf{column B}? \answer{B}
-
-\begin{enumerate}
+\item \textbf{(Category B)} What is the probability the chosen cell lies in \textbf{column B}? \answer{A}
+\begin{enumerate}[label=(\Alph*)]
 \item $\displaystyle \frac{18+15+6}{12+18+7+9+20+15+11+4+8+6+14+10}$
 \item $\displaystyle \frac{18}{12+18+7+9+20+15+11+4+8+6+14+10}$
 \item $\displaystyle \frac{15}{12+18+7+9+20+15+11+4+8+6+14+10}$
@@ -32,8 +26,7 @@ A single cell is chosen uniformly at random from the $3\times4=12$ cells.
 
 % --- S2
 \item \textbf{(Conditional on C)} Compute $P(\text{Row 1}\mid \text{column C})$. \answer{A}
-
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
 \item $\displaystyle \frac{7}{7+11+14}$
 \item $\displaystyle \frac{11}{7+11+14}$
 \item $\displaystyle \frac{14}{7+11+14}$
@@ -41,9 +34,8 @@ A single cell is chosen uniformly at random from the $3\times4=12$ cells.
 \end{enumerate}
 
 % --- S3
-\item \textbf{(Column D)} Let $X$ be the column label selected uniformly by cell. What is $P(X=D)$? \answer{B}
-
-\begin{enumerate}
+\item \textbf{(Column D)} Let $X$ be the column selected uniformly by cell. What is $P(X=D)$? \answer{A}
+\begin{enumerate}[label=(\Alph*)]
 \item $\displaystyle \frac{9+4+10}{12+18+7+9+20+15+11+4+8+6+14+10}$
 \item $\displaystyle \frac{9}{12+18+7+9+20+15+11+4+8+6+14+10}$
 \item $\displaystyle \frac{4}{12+18+7+9+20+15+11+4+8+6+14+10}$
@@ -51,9 +43,8 @@ A single cell is chosen uniformly at random from the $3\times4=12$ cells.
 \end{enumerate}
 
 % --- S4
-\item \textbf{(Row 2, A or D)} Given the chosen cell is from \textbf{Row 2}, find $P(\text{A or D}\mid \text{Row 2})$. \answer{A}
-
-\begin{enumerate}
+\item \textbf{(Row 2, A or D)} Given the entry is from \textbf{Row 2}, find $P(\text{A or D}\mid \text{Row 2})$. \answer{A}
+\begin{enumerate}[label=(\Alph*)]
 \item $\displaystyle \frac{20+4}{20+15+11+4}$
 \item $\displaystyle \frac{20+11}{20+15+11+4}$
 \item $\displaystyle \frac{15+11}{20+15+11+4}$
@@ -62,7 +53,6 @@ A single cell is chosen uniformly at random from the $3\times4=12$ cells.
 
 \end{enumerate}
 
-\end{document}
 
     
 
