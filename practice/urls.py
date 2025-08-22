@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views_tex import tex_pdf, tex_svg   # import both if they live there
+from .views_tex import tex_pdf  # only pdf
 
 urlpatterns = [
     # Pages
@@ -17,13 +17,14 @@ urlpatterns = [
     path("api/students/<int:student_id>/wrong-questions/", views.latest_incorrects, name="latest_incorrects"),
     path("api/students/<int:student_id>/wrong-questions/pdf", views.wrong_questions_pdf, name="wrong_questions_pdf"),
 
-    # LaTeX endpoints
-    path("tex/svg/", tex_svg, name="tex_svg"),      # point to wherever it’s implemented
+    # LaTeX compile endpoint (PDF only)
     path("practice/tex/pdf/", tex_pdf, name="tex_pdf"),
 
-    # REMOVE this unless you actually have the view
+    # REMOVE these unless you actually have the views:
+    # path("", views.practice_page, name="practice"),           # only if you want root=practice
     # path("assets/q/<int:pk>.<str:fmt>", views.question_asset, name="question_asset"),
 ]
+
 
 
 
