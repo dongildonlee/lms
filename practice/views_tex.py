@@ -1,68 +1,94 @@
 # practice/views_tex.py
-import os, re, tempfile, subprocess, textwrap
+import json, os, subprocess, tempfile, textwrap, shutil
+from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
-from django.contrib.auth.decorators import login_required
 
-# Minimal standalone doc so the page is tightly cropped
 TEX_WRAPPER = r"""
-\documentclass[tikz,border=2pt]{standalone}
+\documentclass[tikz,border=3pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
 \usepackage{amsmath,amssymb}
-\usepackage{booktabs,array}
 \usepackage{tikz}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.17}
+\usepackage{geometry}
+\geometry{margin=1in}
 \begin{document}
 %s
 \end{document}
 """
 
-_FORBIDDEN = re.compile(
-    r"(\\write18|\\input|\\include|\\openout|\\read|\\usepackage\{shellesc\}|\\immediate\\write|\\catcode)"
-)
+def _run_tectonic(tex_source: str) -> bytes:
+    with tempfile.TemporaryDirectory() as tmp:
+        tex_path = os.path.join(tmp, "doc.tex")
+        pdf_path = os.path.join(tmp, "doc.pdf")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(tex_source)
+        # bin/tectonic in repo; fall back to system if not found
+        bin_path = os.path.join(os.getcwd(), "bin", "tectonic")
+        cmd = [bin_path if os.path.exists(bin_path) else "tectonic", "-X", "compile", tex_path, "--outdir", tmp, "--print"]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+        if not os.path.exists(pdf_path):
+            raise RuntimeError(proc.stdout.decode("utf-8", errors="ignore"))
+        with open(pdf_path, "rb") as f:
+            return f.read()
 
-def _safe_wrap(snippet: str) -> str:
-    # very basic guardrails
-    if not snippet or len(snippet) > 50_000:
-        raise ValueError("empty or too large")
-    if _FORBIDDEN.search(snippet):
-        raise ValueError("forbidden TeX primitive")
-    return TEX_WRAPPER % snippet
+TECTONIC_BIN = getattr(settings, "TECTONIC_BIN", None) \
+    or os.path.join(settings.BASE_DIR, "bin", "tectonic")
+# Fallback to PATH if not in repo
+if not os.path.exists(TECTONIC_BIN):
+    TECTONIC_BIN = shutil.which("tectonic")
 
-@login_required
 @require_GET
 def tex_pdf(request):
-    """Compile ?tex=... to a single-page PDF and return it."""
-    raw = request.GET.get("tex", "")
-    try:
-        doc = _safe_wrap(raw)
-    except ValueError as e:
-        return HttpResponseBadRequest(str(e))
+    tex = request.GET.get("tex", "")
+    if not tex or not tex.strip():
+        return HttpResponseBadRequest("missing tex")
 
-    # where your vendored binary lives (you already added this)
-    tectonic = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin", "tectonic"))
-    if not os.path.exists(tectonic):
-        return HttpResponseBadRequest("tectonic_not_found")
+    # If a full doc was provided, compile as-is; otherwise wrap it.
+    contains_docclass = "\\documentclass" in tex
 
-    with tempfile.TemporaryDirectory() as td:
-        tex_path = os.path.join(td, "doc.tex")
+    if contains_docclass:
+        full_tex = tex
+    else:
+        full_tex = textwrap.dedent(r"""
+            \documentclass{standalone}
+            \usepackage[T1]{fontenc}
+            \usepackage{lmodern}
+            \usepackage{amsmath,amssymb}
+            \usepackage{tikz}
+            \begin{document}
+            %s
+            \end{document}
+        """).strip() % tex
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tex_path = os.path.join(tmp, "doc.tex")
+        pdf_path = os.path.join(tmp, "doc.pdf")
         with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(doc)
+            f.write(full_tex)
 
-        # Run tectonic → PDF
-        proc = subprocess.run(
-            [tectonic, "--keep-logs", "--synctex=0", "-o", td, tex_path],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20
-        )
-        if proc.returncode != 0:
-            msg = proc.stdout.decode("utf-8", "ignore")
-            return HttpResponseBadRequest("tectonic_failed\n" + msg)
+        try:
+            run = subprocess.run(
+                [TECTONIC_BIN, "-X", "compile", tex_path,
+                "--outdir", tmp, "--keep-logs", "--keep-intermediates"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=True, timeout=40,
+            )
 
-        pdf_path = os.path.join(td, "doc.pdf")
+        except subprocess.CalledProcessError as e:
+            log = (e.stdout or b"").decode("utf-8", "ignore")
+            return HttpResponse(log, status=400, content_type="text/plain")
+        except Exception as e:
+            return HttpResponse(str(e), status=500, content_type="text/plain")
+
+        if not os.path.exists(pdf_path):
+            return HttpResponse("PDF not produced", status=500, content_type="text/plain")
+
         with open(pdf_path, "rb") as f:
-            pdf = f.read()
+            data = f.read()
 
-    resp = HttpResponse(pdf, content_type="application/pdf")
-    # Cache so repeated views are cheap
-    resp["Cache-Control"] = "public, max-age=3600"
+    resp = HttpResponse(data, content_type="application/pdf")
+    resp["Cache-Control"] = "no-store"
     return resp
+
