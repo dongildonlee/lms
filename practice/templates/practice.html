@@ -14,9 +14,13 @@
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     input[type="text"] { padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; }
     .spacer { flex: 1; }
+
+    /* Embedded PDF objects produced by the server LaTeX compiler */
+    .latex-pdf { width: 100%; height: 240px; border: 0; display: block; }
+    .latex-pdf.choice { height: 76px; } /* smaller height for options */
   </style>
 
-  <!-- MathJax config + script -->
+  <!-- MathJax config + script (for lightweight inline math only) -->
   <script>
     window.MathJax = {
       tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
@@ -38,12 +42,10 @@
       <a href="/teacher/" target="_blank">Open Teacher View</a>
       <form method="post" action="{% url 'logout' %}" style="margin-left:8px; display:inline;">
         {% csrf_token %}
-        <button type="submit" style="
-            background:none;border:none;padding:0;
-            color:#06c;text-decoration:underline;cursor:pointer;font:inherit;">
+        <button type="submit" style="background:none;border:none;padding:0;color:#06c;text-decoration:underline;cursor:pointer;font:inherit;">
           Log out
         </button>
-      </form>      
+      </form>
     </div>
 
     <p class="muted">Student ID: <strong>{{ me_sid }}</strong></p>
@@ -73,7 +75,7 @@
     }
     const csrftoken = getCookie('csrftoken');
 
-    // Fetch helper
+    // Simple API helper (JSON)
     async function api(url, opts = {}) {
       const o = Object.assign({ headers: {} }, opts);
       if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
@@ -81,6 +83,37 @@
       const res = await fetch(url, o);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
+    }
+
+    // Compile TeX to PDF on the server and return a blob URL we can embed.
+    async function fetchPdfBlobUrl(tex) {
+      const res = await fetch('/practice/tex/pdf/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken || '' },
+        body: JSON.stringify({ tex })
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(`TeX PDF failed: ${msg}`);
+      }
+      const blob = await res.blob(); // application/pdf
+      return URL.createObjectURL(blob);
+    }
+
+    // Decide whether content needs a real LaTeX engine (TikZ, tabular, etc.)
+    function needsFullLaTeX(s) {
+      if (!s) return false;
+      return /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics|\\documentclass/.test(s);
+    }
+
+    // Old normalizer for light MathJax-only content
+    function normalizeTex(s) {
+      if (!s) return '';
+      return s
+        .replace(/\\\\\s*/g, ' ')   // TeX \\ linebreaks -> space
+        .replace(/\s*\n\s*/g, ' ')  // collapse newlines
+        .replace(/\s{2,}/g, ' ')    // collapse runs of spaces
+        .trim();
     }
 
     // MathJax typeset (only the card)
@@ -91,7 +124,7 @@
       }
     }
 
-    // Start practice for the signed-in user (no student_id in body)
+    // Start practice for the signed-in user
     async function startPractice() {
       try {
         const data = await api('/api/attempts/', {
@@ -108,9 +141,7 @@
 
     // Load one question (optionally filtered by tag)
     async function loadQuestion() {
-      // Show the card so “Next Question” is visible even if fetch fails
       $('#qCard').style.display = 'block';
-
       try {
         const tag = $('#tag').value.trim();
         const url = `/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`;
@@ -126,32 +157,40 @@
         }
 
         currentQ = qRes.questions[0];
+        const rawStem = currentQ.stem_md || '';
 
-        // Render LaTeX content
-        function normalizeTex(s) {
-          if (!s) return '';
-          return s
-            .replace(/\\\\\s*/g, ' ')   // turn TeX linebreaks \\ into spaces
-            .replace(/\s*\n\s*/g, ' ')  // collapse newlines
-            .replace(/\s{2,}/g, ' ')    // collapse runs of spaces
-            .trim();
+        // --- STEM ---
+        if (needsFullLaTeX(rawStem)) {
+          const pdfUrl = await fetchPdfBlobUrl(rawStem);   // POST JSON -> PDF blob
+          $('#stem').innerHTML = `<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>`;
+        } else {
+          $('#stem').innerHTML = normalizeTex(rawStem);
         }
-        $('#stem').innerHTML = normalizeTex(currentQ.stem_md);
 
+        // --- CHOICES ---
         const choicesDiv = $('#choices');
         choicesDiv.innerHTML = '';
         const choices = currentQ.choices || {};
         for (const [key, label] of Object.entries(choices)) {
+          const raw = label || '';
           const btn = document.createElement('button');
           btn.className = 'choice';
-          btn.innerHTML = `${key}) ${normalizeTex(label)}`;
+
+          if (needsFullLaTeX(raw)) {
+            const pdfUrl = await fetchPdfBlobUrl(raw);
+            btn.innerHTML = `<span class="font-semibold" style="margin-right:8px">${key})</span>
+                             <object class="latex-pdf choice" data="${pdfUrl}" type="application/pdf"></object>`;
+          } else {
+            btn.innerHTML = `${key}) ${normalizeTex(raw)}`;
+          }
+
           btn.onclick = () => submitAnswer(key);
           choicesDiv.appendChild(btn);
         }
+
         $('#feedback').textContent = '';
         $('#status').textContent = '';
-
-        await typeset();
+        await typeset(); // harmless for PDF; needed for MathJax
       } catch (err) {
         console.error('loadQuestion error:', err);
         $('#status').textContent = `Failed to load question: ${err.message}`;
@@ -181,4 +220,5 @@
   </script>
 </body>
 </html>
+
 
