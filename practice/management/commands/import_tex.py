@@ -46,23 +46,24 @@ def _parse_nested_choices(block_text: str):
 
 
 
-
-
 def _split_top_level_items(body: str):
     """
-    Return (preamble, [top-level item strings]).
-    'preamble' is everything before the FIRST \begin{enumerate} in the file.
+    Return (preamble, items) where preamble is everything before the first
+    top-level \begin{enumerate}, and items are the top-level \item blocks.
     """
     m = re.search(r"\\begin\{enumerate\}", body)
     if not m:
-        # No enumerate found: entire body is preamble
+        # no enumerate: treat whole body as "preamble"
         return body, []
 
     preamble = body[:m.start()]
     enum_start = m.start()
 
     depth = 0
-    items, current_start, end_index = [], None, None
+    items = []
+    current_start = None
+    end_index = None
+
     for tok in ENUM_TOKEN_RE.finditer(body, enum_start):
         beg, end, item = tok.groups()
         if beg:
@@ -87,6 +88,7 @@ def _split_top_level_items(body: str):
         items.append(body[current_start:len(body)])
 
     return preamble, [_trim(x) for x in items if x.strip()]
+
 
 
 
@@ -147,15 +149,17 @@ def parse_tex_file_to_questions(path: Path):
         out = []
         for it in items:
             stem, choices, ans_inline = _extract_item_stem_and_choices(it)
-            # <<< prepend the preamble so each item is self-contained >>>
+
+            # *** THIS IS THE KEY LINE ***
             full_stem = _trim((preamble or "") + "\n\n" + stem) if preamble.strip() else _trim(stem)
+
             correct = (ans_inline or meta.get("answer") or "A").strip().upper()[:1]
             out.append({
                 "type": qtype,
                 "tags": tags,
                 "answer": correct,
-                "stem_tex": full_stem,
-                "choices": choices or None
+                "stem_tex": full_stem,      # store with table included
+                "choices": choices or None,
             })
         return out
 
