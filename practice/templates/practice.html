@@ -7,13 +7,17 @@
 </h1>
 
 <style>
-  /* readable/clean TeX & cards */
+  /* Make MathJax inline unless display */
   #qCard mjx-container { line-height: 1.6; }
   #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
   #qCard mjx-container:not([display="true"]) { display:inline; }
-  #qCard, #qCard * { color: #0f172a; }
-  .latex-pdf { width:100%; height:420px; border:0; display:block; }
-  .latex-pdf.choice { height:96px; }
+
+  /* Dark text in the white card */
+  #qCard, #qCard * { color:#0f172a; }
+
+  /* Embedded PDFs compiled by the server */
+  .latex-pdf { width:100%; height:240px; border:0; display:block; }
+  .latex-pdf.choice { height:76px; } /* smaller for answers */
 </style>
 
 <div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
@@ -27,8 +31,7 @@
              border border-gray-200 bg-white/90 text-ink
              transition duration-200 ease-out transform
              hover:-translate-y-0.5 hover:shadow-md hover:bg-white
-             focus:outline-none focus:ring-2 focus:ring-blue-500/30
-             motion-reduce:transform-none motion-reduce:transition-none">
+             focus:outline-none focus:ring-2 focus:ring-blue-500/30">
       Next ▶
     </button>
 
@@ -44,29 +47,12 @@
 
 {% block scripts %}
 <script>
-const $ = (s) => document.querySelector(s);
-let attemptId = null, currentQ = null;
+/* ---------- small helpers ---------- */
+const $ = (sel) => document.querySelector(sel);
 
-/* read ?tag=… from the dashboard link */
 function qp(name){
   const m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
   return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
-}
-
-/* Only for lightweight MathJax content */
-function normalizeTex(s){
-  if(!s) return '';
-  return s.replace(/<br\s*\/?>/gi,' ')
-          .replace(/\\\\(?!\[|\(|\{)/g,' ')
-          .replace(/\s*\n+\s*/g,' ')
-          .replace(/\s{2,}/g,' ')
-          .trim();
-}
-
-/* Decide when we need the real LaTeX engine */
-function needsFullLaTeX(s){
-  if(!s) return false;
-  return /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics|\\documentclass/.test(s);
 }
 
 function getCookie(name){
@@ -77,39 +63,58 @@ const csrftoken = getCookie('csrftoken');
 
 async function api(url, opts={}){
   const o = Object.assign({ headers:{} }, opts);
-  if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
-  if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken || '';
+  if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
+  if (opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken || '';
   const res = await fetch(url, o);
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-/* GET -> application/pdf -> blob URL (works with X-Frame-Options) */
-async function fetchPdfBlobUrl(tex){
-  const url = '/practice/tex/pdf/?tex=' + encodeURIComponent(tex);
+async function typeset(){
+  const card = $('#qCard');
+  if (window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
+}
+
+/* heavy TeX detector (needs real LaTeX) */
+function needsFullLaTeX(s){
+  if(!s) return false;
+  return /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics|\\documentclass/.test(s);
+}
+
+/* light cleanup for MathJax path */
+function normalizeTex(s){
+  if(!s) return '';
+  return s.replace(/\\\\\s*/g,' ')
+          .replace(/\s*\n\s*/g,' ')
+          .replace(/\s{2,}/g,' ')
+          .trim();
+}
+
+/* GET compile → blob URL (avoids X-Frame-Options on PDFs) */
+async function pdfBlobUrlFromTex(tex){
+  const url = `/practice/tex/pdf/?tex=${encodeURIComponent(tex)}`;
   const res = await fetch(url, { method: 'GET' });
-  if(!res.ok){
-    const msg = await res.text();
-    throw new Error('TeX PDF failed: ' + msg);
+  if (!res.ok) {
+    const msg = await res.text().catch(()=>'');
+    throw new Error(`TeX compile failed (${res.status}): ${msg}`);
   }
-  const blob = await res.blob();
+  const blob = await res.blob(); // application/pdf
   return URL.createObjectURL(blob);
 }
 
-async function typeset(){
-  const card = $('#qCard');
-  if(window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
-}
+/* ---------- main flow ---------- */
+let attemptId = null, currentQ = null;
 
 async function startPractice(){
-  const tag = qp('tag') || '';   // auto from URL
-  if(tag) $('#subjectLabel').textContent = '— ' + tag;
+  const tag = qp('tag');
+  if (!tag) { location.href = '/dashboard/'; return; }
+  $('#subjectLabel').textContent = '— ' + tag;
 
-  try{
+  try {
     const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
     attemptId = data.attempt_id;
     await loadQuestion(tag);
-  }catch(err){
+  } catch (err) {
     $('#status').textContent = `Failed to start: ${err.message}`;
   }
 }
@@ -117,57 +122,48 @@ async function startPractice(){
 async function loadQuestion(tag){
   $('#qCard').classList.remove('hidden');
   try{
-    const qRes = await api(`/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`);
+    const qRes = await api(`/api/questions/?limit=1&tag=${encodeURIComponent(tag)}`);
     if(!qRes.count){
-      $('#stem').innerHTML = `No questions found${tag ? ` for <strong>${tag}</strong>` : ''}.`;
-      $('#choices').innerHTML = ''; $('#feedback').textContent=''; $('#status').textContent='';
+      $('#stem').innerHTML = `No questions found for <strong>${tag}</strong>.`;
+      $('#choices').innerHTML=''; $('#feedback').textContent=''; $('#status').textContent='';
       await typeset(); return;
     }
-
     currentQ = qRes.questions[0];
 
-    // --- STEM ---
+    // STEM
     const rawStem = currentQ.stem_md || '';
-    if(needsFullLaTeX(rawStem)){
-      const url = await fetchPdfBlobUrl(rawStem);
-      $('#stem').innerHTML = `<object class="latex-pdf" data="${url}" type="application/pdf"></object>`;
-    }else{
+    if (needsFullLaTeX(rawStem)) {
+      const blobUrl = await pdfBlobUrlFromTex(rawStem);
+      $('#stem').innerHTML = `<object class="latex-pdf" data="${blobUrl}" type="application/pdf"></object>`;
+    } else {
       $('#stem').innerHTML = normalizeTex(rawStem);
     }
 
-    // --- CHOICES ---
+    // CHOICES
     const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
     const choices = currentQ.choices || {};
-    for(const [key,label] of Object.entries(choices)){
+    for (const [key, label] of Object.entries(choices)) {
       const raw = label || '';
       const btn = document.createElement('button');
-      btn.className = `
-        w-full text-left rounded-xl px-4 py-3
-        border border-gray-200 bg-white/90 text-ink/90
-        transition duration-200 ease-out transform
-        hover:-translate-y-0.5 hover:shadow-md hover:bg-white
-        focus:outline-none focus:ring-2 focus:ring-blue-500/30
-        active:translate-y-0
-        motion-reduce:transform-none motion-reduce:transition-none
-      `.replace(/\s+/g,' ').trim();
+      btn.className = "w-full text-left rounded-xl px-4 py-3 border border-gray-200 bg-white/90 hover:shadow-md";
 
-      if(needsFullLaTeX(raw)){
-        const url = await fetchPdfBlobUrl(raw);
+      if (needsFullLaTeX(raw)) {
+        const blobUrl = await pdfBlobUrlFromTex(raw);
         btn.innerHTML = `<span class="font-semibold mr-2">${key})</span>
-                         <object class="latex-pdf choice" data="${url}" type="application/pdf"></object>`;
-      }else{
+                         <object class="latex-pdf choice" data="${blobUrl}" type="application/pdf"></object>`;
+      } else {
         btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(raw)}`;
       }
       btn.onclick = () => submitAnswer(key);
       choicesDiv.appendChild(btn);
     }
 
-    $('#feedback').textContent = ''; $('#status').textContent = '';
+    $('#feedback').textContent=''; $('#status').textContent='';
     await typeset();
   }catch(err){
     console.error(err);
     $('#status').textContent = `Failed to load question: ${err.message}`;
-    $('#stem').innerHTML = ''; $('#choices').innerHTML = ''; $('#feedback').textContent = '';
+    $('#stem').innerHTML=''; $('#choices').innerHTML=''; $('#feedback').textContent='';
   }
 }
 
@@ -191,12 +187,13 @@ $('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
 document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
-<!-- MathJax (kept at the bottom so it’s loaded when typeset() runs) -->
+<!-- MathJax for light inline TeX -->
 <script>
   window.MathJax = { tex:{ inlineMath:[['$','$'],['\\(','\\)']] }, svg:{ fontCache:'global' } };
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
