@@ -90,22 +90,15 @@
     // Compile TeX to PDF on the server and return a Blob URL we can embed.
     // IMPORTANT: send as x-www-form-urlencoded (NOT JSON) to match the Django view.
     async function fetchPdfBlobUrl(tex) {
-      const body = new URLSearchParams();
-      body.set('tex', tex);
-      const res = await fetch('/practice/tex/pdf/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrftoken },
-        body: body
-      });
-
+      // GET + URL-encoded TeX → returns application/pdf
+      const url = '/practice/tex/pdf/?' + new URLSearchParams({ tex });
+      const res = await fetch(url, { method: 'GET' });
       if (!res.ok) {
-        const log = await res.text();
-        // Surface the LaTeX error log so you can debug quickly
-        $('#status').textContent = `LaTeX error (${res.status}): ` + log.slice(0, 1200);
-        throw new Error(`LaTeX compile failed (${res.status})`);
+        const msg = await res.text();
+        throw new Error(`TeX PDF failed: ${msg}`);
       }
-      const blob = await res.blob(); // application/pdf
-      return URL.createObjectURL(blob);
+      const blob = await res.blob();          // PDF blob
+      return URL.createObjectURL(blob);       // blob: URL (no X-Frame-Options issues)
     }
 
     // Decide whether content needs a real LaTeX engine (TikZ, tabular, etc.)
