@@ -139,6 +139,8 @@
     return `\\(${escaped}\\)`;                // inline math for MathJax
   }
 
+  // Back-compat: old builds referenced maybeInlineMath()
+  const maybeInlineMath = wrapInlineMathIfNeeded;
 
   // POST TeX to server, return blob URL to PDF
   async function fetchPdfBlobUrl(tex){
@@ -225,9 +227,17 @@
           const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
           btn.innerHTML = `<span class="choice-key">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
-        }else{
-          const text = maybeInlineMath(normalizeTex(cbody));
-          btn.innerHTML = `<span class="choice-key">${key})</span><span class="choice-text">${text}</span>`;
+        } else {
+          const rawText = normalizeTex(cbody);
+          const maybeMath = wrapInlineMathIfNeeded(rawText);
+          // If we wrapped it, feed MathJax; otherwise render prose (emph/textbf)
+          if (maybeMath.startsWith('\\(')) {
+            btn.innerHTML =
+              `<span class="choice-key">${key})</span><span class="choice-text">${maybeMath}</span>`;
+          } else {
+            btn.innerHTML =
+              `<span class="choice-key">${key})</span><span class="choice-text">${proseToHTML(rawText)}</span>`;
+          }
         }
 
         btn.onclick = () => submitAnswer(key);
