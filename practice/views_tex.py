@@ -1,18 +1,15 @@
 # practice/views_tex.py
-import os, shutil, subprocess, tempfile, textwrap
+import os, shutil, subprocess, tempfile, textwrap, json
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-# Resolve tectonic binary (vendored first, PATH fallback)
 TECTONIC_BIN = getattr(settings, "TECTONIC_BIN", None) or os.path.join(settings.BASE_DIR, "bin", "tectonic")
 if not os.path.exists(TECTONIC_BIN):
     TECTONIC_BIN = shutil.which("tectonic")
 
-# Minimal wrapper when the snippet is not a full document
-SNIPPET_WRAPPER = r"""
-\documentclass[tikz,border=3pt]{standalone}
+STANDALONE_WRAPPER = r"""\documentclass{standalone}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{amsmath,amssymb}
@@ -20,74 +17,63 @@ SNIPPET_WRAPPER = r"""
 \begin{document}
 %s
 \end{document}
-""".lstrip()
+"""
 
-def _compile_pdf(tex_source: str) -> bytes:
-    if not TECTONIC_BIN:
-        return HttpResponse("tectonic_not_found", status=500, content_type="text/plain")
+@csrf_exempt
+@require_http_methods(["GET","POST"])
+def tex_pdf(request):
+    # Read TeX from GET ?tex=... or POST JSON {"tex": "..."}
+    tex = ""
+    if request.method == "GET":
+        tex = request.GET.get("tex", "") or ""
+    else:  # POST
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+            tex = payload.get("tex", "") or ""
+        except Exception:
+            return HttpResponseBadRequest("invalid json")
+
+    if not tex.strip():
+        return HttpResponseBadRequest("missing tex")
+
+    # normalize EOLs for robust matching
+    tex = tex.replace("\r\n", "\n").replace("\r", "\n")
+
+    # If caller sent a full doc but forgot to close, auto-close it
+    if "\\documentclass" in tex:
+        if "\\begin{document}" not in tex:
+            tex += "\n\\begin{document}\n"
+        if "\\end{document}" not in tex:
+            tex += "\n\\end{document}\n"
+        full_tex = tex
+    else:
+        full_tex = STANDALONE_WRAPPER % tex
+
     with tempfile.TemporaryDirectory() as tmp:
         tex_path = os.path.join(tmp, "doc.tex")
         pdf_path = os.path.join(tmp, "doc.pdf")
         with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(tex_source)
-
+            f.write(full_tex)
         try:
             run = subprocess.run(
                 [TECTONIC_BIN, "--keep-intermediates", "-o", tmp, tex_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                check=True,
-                timeout=45,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True, timeout=45,
             )
         except subprocess.CalledProcessError as e:
-            log = (e.stdout or b"").decode("utf-8", "ignore")
-            return HttpResponse(log, status=400, content_type="text/plain")
+            return HttpResponse((e.stdout or b"").decode("utf-8","ignore"), status=400, content_type="text/plain")
         except Exception as e:
             return HttpResponse(str(e), status=500, content_type="text/plain")
 
         if not os.path.exists(pdf_path):
             return HttpResponse("PDF not produced", status=500, content_type="text/plain")
+        data = open(pdf_path, "rb").read()
 
-        with open(pdf_path, "rb") as f:
-            return f.read()
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def tex_pdf(request):
-    """
-    Compile TeX to PDF.
-    - If 'tex' contains \documentclass, compile as-is.
-    - Otherwise wrap it in a tiny standalone preamble (TikZ-capable).
-    Accepts:
-      * POST: x-www-form-urlencoded or multipart (field 'tex')
-      * GET : query param 'tex'
-    """
-    tex = ""
-    if request.method == "POST":
-        tex = request.POST.get("tex", "")
-        if not tex and request.body and request.headers.get("Content-Type", "").startswith("application/x-www-form-urlencoded"):
-            # Safety: in case framework parsing failed
-            tex = request.body.decode("utf-8", "ignore")
-            # crude extraction
-            if tex.startswith("tex="):
-                tex = tex[4:]
-    else:
-        tex = request.GET.get("tex", "")
-
-    if not tex or not tex.strip():
-        return HttpResponseBadRequest("missing tex")
-
-    # Full document or snippet?
-    contains_docclass = "\\documentclass" in tex
-    full_tex = tex if contains_docclass else (SNIPPET_WRAPPER % tex)
-
-    pdf_or_resp = _compile_pdf(full_tex)
-    if isinstance(pdf_or_resp, HttpResponse):
-        return pdf_or_resp
-
-    resp = HttpResponse(pdf_or_resp, content_type="application/pdf")
+    resp = HttpResponse(data, content_type="application/pdf")
     resp["Cache-Control"] = "no-store"
     return resp
+
+
+
 
 
 
