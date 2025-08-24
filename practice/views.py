@@ -287,7 +287,7 @@ def get_questions(request):
 def practice_page(request):
     get_token(request)  # ensure CSRF cookie exists
     sid = getattr(getattr(request.user, "studentprofile", None), "sid", None) or f"S{request.user.id:06d}"
-    return render(request, "practice.html", {
+    return render(request, "practice/practice.html", {
         "me_id": request.user.id,
         "me_sid": sid,
         "me_name": request.user.username,
