@@ -130,11 +130,15 @@
   }
 
   // If something looks like bare math, wrap it for MathJax
-  function maybeInlineMath(s){
-    const hasMath = /\\frac|\\dfrac|\\over\b|[_^]|\\sum|\\sqrt|\\cdot/.test(s);
-    const alreadyWrapped = /\$|\\\(|\\begin\{(align|equation|gather)\}/.test(s);
-    return (hasMath && !alreadyWrapped) ? `\\(${s}\\)` : s;
+  function wrapInlineMathIfNeeded(s){
+    if(!s) return s;
+    const looksMath = /\\[a-zA-Z]+|[_^]|\\sqrt|\\frac|\\cdot|\\times|\\sum|\\int/.test(s);
+    if(!looksMath) return s;                  // leave prose alone
+    // Escape % so it doesn't kill the rest of the line in TeX
+    const escaped = s.replace(/%/g, '\\%');
+    return `\\(${escaped}\\)`;                // inline math for MathJax
   }
+
 
   // POST TeX to server, return blob URL to PDF
   async function fetchPdfBlobUrl(tex){
