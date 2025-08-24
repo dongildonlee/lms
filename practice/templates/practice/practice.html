@@ -2,54 +2,31 @@
 {% block title %}Practice | Wrong-Answer Packets{% endblock %}
 
 {% block content %}
-<h1 class="text-3xl font-semibold mb-6 text-white drop-shadow">
-  Practice <span id="subjectLabel" class="text-gray-300 text-lg"></span>
-</h1>
+<h1 class="text-3xl font-semibold mb-6 text-white drop-shadow">Practice</h1>
 
 <style>
-  /* Make MathJax inline unless display */
+  /* Keep MathJax inline unless explicitly display */
   #qCard mjx-container { line-height: 1.6; }
   #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
   #qCard mjx-container:not([display="true"]) { display:inline; }
 
-  /* Dark text in the white card */
+  /* Card text color */
   #qCard, #qCard * { color:#0f172a; }
 
-  /* Embedded PDFs compiled by the server (responsive heights) */
-  .latex-pdf { 
-    width:100%; 
-    height: clamp(320px, 42vw, 560px);   /* grow with viewport width */
-    border:0; 
-    display:block; 
+  /* PDF objects: width 100%, height set by JS; white bg masks viewer chrome */
+  .latex-pdf { width:100%; display:block; background:#fff; border:0; }
+  .choice-btn {
+    display:block; width:100%;
+    text-align:left; padding:14px 16px; border-radius:12px;
+    border:1px solid #e5e7eb; background:#fff;
+    transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
   }
-
-  .latex-pdf.choice { 
-    height: clamp(84px, 12vw, 160px);    /* options get a smaller but flexible box */
-  }
-
-  /* Pretty choice buttons */
-  .choice-btn{
-    width:100%;
-    text-align:left;
-    padding:.75rem 1rem;
-    border:1px solid #e5e7eb;             /* gray-200 */
-    border-radius: .75rem;                 /* rounded-xl */
-    background: rgba(255,255,255,.9);
-    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
-  }
-  .choice-btn:hover{
-    transform: translateY(-2px);
-    box-shadow: 0 8px 18px rgba(2,6,23,.08); /* subtle lift */
-    background:#fff;
-  }
-  .choice-key{
-    font-weight:600;
-    margin-right:.5rem;
-  }
+  .choice-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(15,23,42,.08); background:#fff; }
+  .choice-key { font-weight:600; margin-right:8px; }
 </style>
 
 <div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
-  <div id="stem" class="text-lg mb-4 whitespace-normal leading-7"></div>
+  <div id="stem" class="text-lg mb-5 whitespace-normal leading-7"></div>
   <div id="choices" class="space-y-2"></div>
   <div id="feedback" class="mt-4 font-semibold"></div>
 
@@ -75,178 +52,159 @@
 
 {% block scripts %}
 <script>
-  const $ = (sel) => document.querySelector(sel);
-  let attemptId = null;
-  let currentQ = null;
+  const $ = sel => document.querySelector(sel);
+  let attemptId = null, currentQ = null;
 
-  // --- CSRF ---
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-  }
+  // CSRF
+  function getCookie(n){ const v=`; ${document.cookie}`; const p=v.split(`; ${n}=`); if(p.length===2) return p.pop().split(';').shift(); }
   const csrftoken = getCookie('csrftoken') || '';
 
-  // === helpers ===============================================================
   // Detect “heavy” LaTeX envs
   const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
   const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
-
   function extractFirstHeavyBlock(s){
-    const m = s.match(HEAVY_RE);
-    if(!m) return null;
-    return { before: s.slice(0, m.index), block: m[0], after: s.slice(m.index + m[0].length) };
+    const m=s.match(HEAVY_RE); if(!m) return null;
+    return { before:s.slice(0,m.index), block:m[0], after:s.slice(m.index+m[0].length) };
   }
 
-  // Keep only the document body if a full doc was pasted
+  // Keep body if a full document slipped in
   function stripDocBody(s){
     if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
     return m ? m[1] : s;
   }
 
-  // Clean prose around heavy block
-  function cleanBefore(s){
-    if(!s) return '';
-    if (/\\documentclass|\\usepackage|\\geometry|\\begin\{document\}/.test(s)) return '';
-    return s;
-  }
-  function cleanAfter(s){
-    if(!s) return '';
-    return s.replace(/\\end\{center\}/g,'').replace(/\\bigskip/g,'').replace(/%[=\-]{3,}.*/g,'');
-  }
-
-  // Very light HTML rendering for prose (also handles \emph{} / \textbf{})
+  // Light prose formatting: **bold**, \textit{}, \emph{}
   function escapeHTML(x){ return (x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function proseToHTML(s){
-    let h = escapeHTML(s || '');
-    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>');
-    h = h.replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>');
-    h = h.replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
-    h = h.replace(/\n{2,}/g, '<br><br>').replace(/\n/g, ' ');
+    let h = escapeHTML(s||'');
+    h = h.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    h = h.replace(/\\textit\{([^}]*)\}/g,'<em>$1</em>');
+    h = h.replace(/\\emph\{([^}]*)\}/g,'<em>$1</em>');
+    h = h.replace(/\n{2,}/g,'<br><br>').replace(/\n/g,' ');
     return h.trim();
   }
 
-  // Normalize trivial TeX whitespace
+  // MathJax-safe normalization for light cases
   function normalizeTex(s){
-    if(!s) return '';
-    return s.replace(/\\\\\s*/g,' ')
-            .replace(/\s*\n\s*/g,' ')
-            .replace(/\s{2,}/g,' ')
-            .trim();
+    return (s||'').replace(/\\\\\s*/g,' ').replace(/\s*\n\s*/g,' ').replace(/\s{2,}/g,' ').trim();
   }
 
-  // If something looks like bare math, wrap it for MathJax
-  function maybeInlineMath(s){
-    const hasMath = /\\frac|\\dfrac|\\over\b|[_^]|\\sum|\\sqrt|\\cdot/.test(s);
-    const alreadyWrapped = /\$|\\\(|\\begin\{(align|equation|gather)\}/.test(s);
-    return (hasMath && !alreadyWrapped) ? `\\(${s}\\)` : s;
-  }
-
-  // POST TeX to server, return blob URL to PDF
+  // POST TeX -> PDF blob URL
   async function fetchPdfBlobUrl(tex){
     const res = await fetch('/practice/tex/pdf/', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'X-CSRFToken': csrftoken },
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'X-CSRFToken': csrftoken },
       body: JSON.stringify({ tex })
     });
-    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    const ct=(res.headers.get('content-type')||'').toLowerCase();
     if(!res.ok || !ct.includes('application/pdf')){
-      const msg = await res.text();
+      const msg=await res.text();
       throw new Error(`TeX compile failed ${res.status}: ${msg}`);
     }
-    const blob = await res.blob();
+    const blob=await res.blob();
     return URL.createObjectURL(blob);
   }
 
+  // Insert a PDF <object> and size it from width using an aspect ratio
+  function injectPdfObject(container, url, ratio){
+    container.innerHTML = '';
+    const obj = document.createElement('object');
+    obj.className = 'latex-pdf';
+    obj.type = 'application/pdf';
+    obj.data = url;
+    container.appendChild(obj);
+    // Size after it’s in the layout
+    requestAnimationFrame(()=> {
+      const w = obj.clientWidth || container.clientWidth || 600;
+      const h = Math.max(120, Math.round(w / ratio)); // ratio = width/height
+      obj.style.height = h + 'px';
+    });
+  }
+
   async function typeset(){
-    const card = $('#qCard');
-    if(window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
+    if(window.MathJax?.typesetPromise) await MathJax.typesetPromise([$('#qCard')]);
   }
 
   async function api(url, opts={}){
-    const o = Object.assign({ headers:{} }, opts);
+    const o=Object.assign({headers:{}},opts);
     if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type']='application/json';
-    if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
-    const r = await fetch(url, o);
+    if(opts.method==='POST') o.headers['X-CSRFToken']=csrftoken;
+    const r=await fetch(url,o);
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   }
 
-  // === Flow =================================================================
   async function startPractice(){
     try{
       const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
-      attemptId = data.attempt_id;
+      attemptId=data.attempt_id;
       await loadQuestion();
-    }catch(e){ $('#status').textContent = `Failed to start: ${e.message}`; }
+    }catch(e){ $('#status').textContent=`Failed to start: ${e.message}`; }
   }
 
   async function loadQuestion(){
-    $('#qCard')?.classList.remove('hidden');
+    $('#qCard').classList.remove('hidden');
     $('#qCard').style.display='block';
 
     try{
       const tag = new URLSearchParams(location.search).get('tag') || '';
       const qRes = await api(`/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`);
       if(!qRes.count){
-        $('#stem').innerHTML = 'No questions found.';
-        $('#choices').innerHTML = '';
-        $('#feedback').textContent = '';
-        await typeset();
-        return;
+        $('#stem').innerHTML='No questions found.';
+        $('#choices').innerHTML='';
+        $('#feedback').textContent='';
+        await typeset(); return;
       }
 
       currentQ = qRes.questions[0];
+      const body = stripDocBody(currentQ.stem_md || '');
+      const parts = extractFirstHeavyBlock(body);
 
-      // -------- STEM: compile ONLY the heavy block (e.g., tikzpicture) ------
-      const rawStem  = currentQ.stem_md || '';
-      const body     = stripDocBody(rawStem);
-      const parts    = extractFirstHeavyBlock(body);
-
+      // STEM
       if(parts){
-        const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
-        const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
-        const pdfUrl     = await fetchPdfBlobUrl(parts.block);
-        $('#stem').innerHTML = `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
+        const before = proseToHTML(normalizeTex(parts.before));
+        const after  = proseToHTML(normalizeTex(parts.after));
+        const url    = await fetchPdfBlobUrl(parts.block);
+        $('#stem').innerHTML = `${before}<div id="stemPdfHolder"></div>${after}`;
+        injectPdfObject($('#stemPdfHolder'), url, /* width/height */ 4/3);
       }else{
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
 
-      // -------- CHOICES: pretty buttons, MathJax for light math -------------
-      const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
-      const choices = currentQ.choices || {};
+      // CHOICES
+      const choicesDiv=$('#choices'); choicesDiv.innerHTML='';
+      const choices=currentQ.choices || {};
       for(const [key,label] of Object.entries(choices)){
         const cbody  = stripDocBody(label || '');
         const cparts = extractFirstHeavyBlock(cbody);
 
-        const btn = document.createElement('button');
-        btn.className = 'choice-btn';
+        const btn=document.createElement('button');
+        btn.className='choice-btn';
+        btn.type='button';
 
         if(cparts){
-          const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
-          const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
-          const url    = await fetchPdfBlobUrl(cparts.block);
-          btn.innerHTML = `<span class="choice-key">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
+          const before=proseToHTML(normalizeTex(cparts.before));
+          const after =proseToHTML(normalizeTex(cparts.after));
+          btn.innerHTML = `<span class="choice-key">${key})</span>${before}<div class="choicePdfHolder"></div>${after}`;
+          const url = await fetchPdfBlobUrl(cparts.block);
+          // Use a wide ratio for compact answers; tweak if needed
+          setTimeout(()=> injectPdfObject(btn.querySelector('.choicePdfHolder'), url, 6/1), 0);
         }else{
-          const text = maybeInlineMath(normalizeTex(cbody));
-          btn.innerHTML = `<span class="choice-key">${key})</span><span class="choice-text">${text}</span>`;
+          btn.innerHTML = `<span class="choice-key">${key})</span>${proseToHTML(normalizeTex(cbody))}`;
         }
 
-        btn.onclick = () => submitAnswer(key);
+        btn.onclick=()=>submitAnswer(key);
         choicesDiv.appendChild(btn);
       }
 
-      $('#feedback').textContent = '';
-      $('#status').textContent   = '';
-      await typeset();  // typeset inline math in prose/choices
+      $('#feedback').textContent='';
+      $('#status').textContent='';
+      await typeset();
     }catch(e){
       console.error(e);
-      $('#status').textContent = `Failed to load question: ${e.message}`;
-      $('#stem').innerHTML = '';
-      $('#choices').innerHTML = '';
-      $('#feedback').textContent = '';
+      $('#status').textContent=`Failed to load question: ${e.message}`;
+      $('#stem').innerHTML=''; $('#choices').innerHTML=''; $('#feedback').textContent='';
     }
   }
 
@@ -254,28 +212,27 @@
     if(!attemptId || !currentQ) return;
     try{
       const res = await api(`/api/attempts/${attemptId}/items/`, {
-        method:'POST',
-        body: JSON.stringify({ question_id: currentQ.id, answer:{ choice: choiceKey } })
+        method:'POST', body: JSON.stringify({ question_id: currentQ.id, answer:{ choice: choiceKey } })
       });
-      const ok = !!res.is_correct;
+      const ok=!!res.is_correct;
       $('#feedback').textContent = ok ? '✅ Correct' : '❌ Incorrect';
       $('#feedback').className   = ok ? 'ok' : 'err';
     }catch(e){
-      $('#feedback').textContent = `Submit failed: ${e.message}`;
-      $('#feedback').className   = 'err';
+      $('#feedback').textContent=`Submit failed: ${e.message}`;
+      $('#feedback').className='err';
     }
   }
 
-  // kick off if this page is the practice/problems page
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
-<!-- MathJax for light inline TeX -->
+<!-- MathJax (light inline math) -->
 <script>
   window.MathJax = { tex:{ inlineMath:[['$','$'],['\\(','\\)']] }, svg:{ fontCache:'global' } };
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
