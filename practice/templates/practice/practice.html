@@ -51,7 +51,7 @@
   let attemptId = null;
   let currentQ = null;
 
-  // CSRF helper
+  // --- CSRF (unchanged) ---
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -59,125 +59,134 @@
   }
   const csrftoken = getCookie('csrftoken') || '';
 
-  // --- LaTeX helpers --------------------------------------------------------
-
-  // Only use the server PDF compiler for HEAVY LaTeX (tikz, tabular, align envs, etc.)
-  function needsFullLaTeX(s) {
-    if (!s) return false;
-    return /\\begin\{(tikzpicture|tabular|array|align\*?|tcolorbox|axis)\}|\\includegraphics/.test(s);
+  // === NEW helpers ===========================================================
+  // Detect “heavy” LaTeX envs
+  const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
+  const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
+  function extractFirstHeavyBlock(s){
+    const m = s.match(HEAVY_RE);
+    if(!m) return null;
+    return { before: s.slice(0, m.index), block: m[0], after: s.slice(m.index + m[0].length) };
   }
 
-  // If the string contains a full LaTeX document, keep only the body
-  function stripDocBody(s) {
-    if (!s) return '';
+  // Keep only the document body if caller accidentally included a full doc
+  function stripDocBody(s){
+    if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
     return m ? m[1] : s;
   }
 
-  // Light normalizer for MathJax display
-  function normalizeTex(s) {
-    if (!s) return '';
-    return s
-      .replace(/\\\\\s*/g, ' ')   // TeX \\ linebreaks -> space
-      .replace(/\s*\n\s*/g, ' ')  // collapse newlines
-      .replace(/\s{2,}/g, ' ')    // collapse runs of spaces
-      .trim();
+  // Very light HTML rendering for prose (supports **bold** and \textit{})
+  function escapeHTML(x){ return x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function proseToHTML(s){
+    let h = escapeHTML(s || '');
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
+    h = h.replace(/\n{2,}/g, '<br><br>').replace(/\n/g, ' ');
+    return h.trim();
   }
 
-  // POST TeX to the server compiler and return a blob URL for the resulting PDF.
-  async function fetchPdfBlobUrl(tex) {
+  // Keep MathJax path for light inline math
+  function normalizeTex(s){
+    if(!s) return '';
+    return s.replace(/\\\\\s*/g,' ')
+            .replace(/\s*\n\s*/g,' ')
+            .replace(/\s{2,}/g,' ')
+            .trim();
+  }
+
+  // POST TeX to server, return blob URL to PDF
+  async function fetchPdfBlobUrl(tex){
     const res = await fetch('/practice/tex/pdf/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+      headers: { 'Content-Type':'application/json', 'X-CSRFToken': csrftoken },
       body: JSON.stringify({ tex })
     });
     const ct = (res.headers.get('content-type') || '').toLowerCase();
-    if (!res.ok || !ct.includes('application/pdf')) {
+    if(!res.ok || !ct.includes('application/pdf')){
       const msg = await res.text();
-      throw new Error(`TeX compile failed (${res.status}): ${msg}`);
+      throw new Error(`TeX compile failed ${res.status}: ${msg}`);
     }
     const blob = await res.blob();
     return URL.createObjectURL(blob);
   }
 
-  // MathJax typeset (only the card)
-  async function typeset() {
+  async function typeset(){
     const card = $('#qCard');
-    if (window.MathJax && MathJax.typesetPromise && card) {
-      await MathJax.typesetPromise([card]);
-    }
+    if(window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
   }
 
-  // --- API helper -----------------------------------------------------------
-  async function api(url, opts = {}) {
-    const o = Object.assign({ headers: {} }, opts);
-    if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
-    if (opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
-    const res = await fetch(url, o);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+  async function api(url, opts={}){
+    const o = Object.assign({ headers:{} }, opts);
+    if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type']='application/json';
+    if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
+    const r = await fetch(url, o);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
   }
 
-  // --- Flow -----------------------------------------------------------------
-
-  async function startPractice() {
-    try {
-      const data = await api('/api/attempts/', {
-        method: 'POST',
-        body: JSON.stringify({ assignment_title: 'Practice' })
-      });
+  // === Flow =================================================================
+  async function startPractice(){
+    try{
+      const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
       attemptId = data.attempt_id;
-      $('#status').textContent = `Attempt #${attemptId} started.`;
       await loadQuestion();
-    } catch (err) {
-      $('#status').textContent = `Failed to start: ${err.message}`;
-    }
+    }catch(e){ $('#status').textContent = `Failed to start: ${e.message}`; }
   }
 
-  async function loadQuestion() {
-    $('#qCard').style.display = 'block';
-    try {
-      const tag = $('#tag')?.value?.trim() || '';
-      const url = `/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`;
-      const qRes = await api(url);
+  async function loadQuestion(){
+    $('#qCard')?.classList.remove('hidden');
+    $('#qCard').style.display='block';
 
-      if (!qRes.count) {
-        $('#stem').innerHTML = 'No questions found. Add some in <code>/admin</code> or clear the tag.';
+    try{
+      const tag = new URLSearchParams(location.search).get('tag') || '';
+      const qRes = await api(`/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`);
+      if(!qRes.count){
+        $('#stem').innerHTML = 'No questions found.';
         $('#choices').innerHTML = '';
         $('#feedback').textContent = '';
-        $('#status').textContent = 'No questions found.';
         await typeset();
         return;
       }
 
       currentQ = qRes.questions[0];
-      const rawStem = currentQ.stem_md || '';
-      const stemBody = stripDocBody(rawStem);
 
-      // ---- STEM ----
-      if (needsFullLaTeX(stemBody)) {
-        const pdfUrl = await fetchPdfBlobUrl(stemBody);
-        $('#stem').innerHTML = `<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>`;
-      } else {
-        $('#stem').innerHTML = normalizeTex(stemBody);
+      // -------- STEM: compile ONLY the heavy block (e.g., tikzpicture) ------
+      const rawStem  = currentQ.stem_md || '';
+      const body     = stripDocBody(rawStem);
+      const parts    = extractFirstHeavyBlock(body);
+
+      if(parts){
+        // before
+        const beforeHTML = proseToHTML(normalizeTex(parts.before));
+        // heavy block -> PDF
+        const pdfUrl = await fetchPdfBlobUrl(parts.block);
+        // after
+        const afterHTML = proseToHTML(normalizeTex(parts.after));
+        $('#stem').innerHTML = `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
+      }else{
+        // nothing heavy: just prose/math
+        $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
 
-      // ---- CHOICES ----
-      const choicesDiv = $('#choices');
-      choicesDiv.innerHTML = '';
+      // -------- CHOICES: same idea, but simpler -----------------------------
+      const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
       const choices = currentQ.choices || {};
-      for (const [key, label] of Object.entries(choices)) {
+      for(const [key,label] of Object.entries(choices)){
         const raw = label || '';
-        const body = stripDocBody(raw);
+        const cbody = stripDocBody(raw);
+        const cparts = extractFirstHeavyBlock(cbody);
+
         const btn = document.createElement('button');
         btn.className = 'choice';
 
-        if (needsFullLaTeX(body)) {
-          const pdfUrl = await fetchPdfBlobUrl(body);
-          btn.innerHTML = `<span style="margin-right:8px;font-weight:600">${key})</span>
-                           <object class="latex-pdf choice" data="${pdfUrl}" type="application/pdf"></object>`;
-        } else {
-          btn.innerHTML = `${key}) ${normalizeTex(body)}`;
+        if(cparts){
+          const before = proseToHTML(normalizeTex(cparts.before));
+          const url    = await fetchPdfBlobUrl(cparts.block);
+          const after  = proseToHTML(normalizeTex(cparts.after));
+          btn.innerHTML = `<span style="font-weight:600;margin-right:8px">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
+        }else{
+          btn.innerHTML = `<span style="font-weight:600;margin-right:8px">${key})</span>${proseToHTML(normalizeTex(cbody))}`;
         }
 
         btn.onclick = () => submitAnswer(key);
@@ -185,35 +194,37 @@
       }
 
       $('#feedback').textContent = '';
-      $('#status').textContent = '';
+      $('#status').textContent   = '';
       await typeset();
-    } catch (err) {
-      console.error('loadQuestion error:', err);
-      $('#status').textContent = `Failed to load question: ${err.message}`;
+    }catch(e){
+      console.error(e);
+      $('#status').textContent = `Failed to load question: ${e.message}`;
       $('#stem').innerHTML = '';
       $('#choices').innerHTML = '';
       $('#feedback').textContent = '';
     }
   }
 
-  async function submitAnswer(choiceKey) {
-    if (!attemptId || !currentQ) return;
-    try {
+  async function submitAnswer(choiceKey){
+    if(!attemptId || !currentQ) return;
+    try{
       const res = await api(`/api/attempts/${attemptId}/items/`, {
-        method: 'POST',
-        body: JSON.stringify({ question_id: currentQ.id, answer: { choice: choiceKey } })
+        method:'POST',
+        body: JSON.stringify({ question_id: currentQ.id, answer:{ choice: choiceKey } })
       });
-      $('#feedback').textContent = res.is_correct ? '✅ Correct' : '❌ Incorrect';
-      $('#feedback').className = res.is_correct ? 'ok' : 'err';
-    } catch (err) {
-      $('#feedback').textContent = `Submit failed: ${err.message}`;
-      $('#feedback').className = 'err';
+      const ok = !!res.is_correct;
+      $('#feedback').textContent = ok ? '✅ Correct' : '❌ Incorrect';
+      $('#feedback').className   = ok ? 'ok' : 'err';
+    }catch(e){
+      $('#feedback').textContent = `Submit failed: ${e.message}`;
+      $('#feedback').className   = 'err';
     }
   }
 
-  $('#startBtn')?.addEventListener('click', startPractice);
-  $('#nextBtn')?.addEventListener('click', loadQuestion);
+  // kick off if this page is the practice/problems page
+  document.addEventListener('DOMContentLoaded', startPractice);
 </script>
+
 
 
 <!-- MathJax for light inline TeX -->
