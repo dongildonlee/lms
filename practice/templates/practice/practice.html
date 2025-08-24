@@ -92,7 +92,7 @@ function normalizeTex(s){
 
 /* GET compile → blob URL (avoids X-Frame-Options on PDFs) */
 async function pdfBlobUrlFromTex(tex){
-  const url = `/practice/tex/pdf/?tex=${encodeURIComponent(tex)}`;
+  const url = URL.createObjectURL(await (await fetch('/practice/tex/pdf/', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tex })})).blob());
   const res = await fetch(url, { method: 'GET' });
   if (!res.ok) {
     const msg = await res.text().catch(()=>'');
