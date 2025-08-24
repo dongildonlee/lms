@@ -18,6 +18,26 @@
   /* Embedded PDFs compiled by the server */
   .latex-pdf { width:100%; height:240px; border:0; display:block; }
   .latex-pdf.choice { height:76px; } /* smaller for answers */
+
+  /* Pretty choice buttons */
+  .choice-btn{
+    width:100%;
+    text-align:left;
+    padding:.75rem 1rem;
+    border:1px solid #e5e7eb;             /* gray-200 */
+    border-radius: .75rem;                 /* rounded-xl */
+    background: rgba(255,255,255,.9);
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+  .choice-btn:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(2,6,23,.08); /* subtle lift */
+    background:#fff;
+  }
+  .choice-key{
+    font-weight:600;
+    margin-right:.5rem;
+  }
 </style>
 
 <div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
@@ -51,7 +71,7 @@
   let attemptId = null;
   let currentQ = null;
 
-  // --- CSRF (unchanged) ---
+  // --- CSRF ---
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -70,14 +90,14 @@
     return { before: s.slice(0, m.index), block: m[0], after: s.slice(m.index + m[0].length) };
   }
 
-  // Keep only the document body if caller accidentally included a full doc
+  // Keep only the document body if a full doc was pasted
   function stripDocBody(s){
     if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
     return m ? m[1] : s;
   }
 
-  // Hide preamble-ish lines before the heavy block, and trim control lines after
+  // Clean prose around heavy block
   function cleanBefore(s){
     if(!s) return '';
     if (/\\documentclass|\\usepackage|\\geometry|\\begin\{document\}/.test(s)) return '';
@@ -85,29 +105,35 @@
   }
   function cleanAfter(s){
     if(!s) return '';
-    return s
-      .replace(/\\end\{center\}/g, '')
-      .replace(/\\bigskip/g, '')
-      .replace(/%[=\-]{3,}.*/g, '');  // long %==== separator lines
+    return s.replace(/\\end\{center\}/g,'').replace(/\\bigskip/g,'').replace(/%[=\-]{3,}.*/g,'');
   }
 
-  // Very light HTML rendering for prose (supports **bold** and \textit{})
-  function escapeHTML(x){ return x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // Very light HTML rendering for prose (also handles \emph{} / \textbf{})
+  function escapeHTML(x){ return (x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function proseToHTML(s){
     let h = escapeHTML(s || '');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>');
+    h = h.replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>');
     h = h.replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
     h = h.replace(/\n{2,}/g, '<br><br>').replace(/\n/g, ' ');
     return h.trim();
   }
 
-  // Keep MathJax path for light inline math
+  // Normalize trivial TeX whitespace
   function normalizeTex(s){
     if(!s) return '';
     return s.replace(/\\\\\s*/g,' ')
             .replace(/\s*\n\s*/g,' ')
             .replace(/\s{2,}/g,' ')
             .trim();
+  }
+
+  // If something looks like bare math, wrap it for MathJax
+  function maybeInlineMath(s){
+    const hasMath = /\\frac|\\dfrac|\\over\b|[_^]|\\sum|\\sqrt|\\cdot/.test(s);
+    const alreadyWrapped = /\$|\\\(|\\begin\{(align|equation|gather)\}/.test(s);
+    return (hasMath && !alreadyWrapped) ? `\\(${s}\\)` : s;
   }
 
   // POST TeX to server, return blob URL to PDF
@@ -180,7 +206,7 @@
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
 
-      // -------- CHOICES: same idea -----------------------------------------
+      // -------- CHOICES: pretty buttons, MathJax for light math -------------
       const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
       const choices = currentQ.choices || {};
       for(const [key,label] of Object.entries(choices)){
@@ -188,15 +214,16 @@
         const cparts = extractFirstHeavyBlock(cbody);
 
         const btn = document.createElement('button');
-        btn.className = 'choice';
+        btn.className = 'choice-btn';
 
         if(cparts){
           const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
           const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
-          btn.innerHTML = `<span style="font-weight:600;margin-right:8px">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
+          btn.innerHTML = `<span class="choice-key">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
         }else{
-          btn.innerHTML = `<span style="font-weight:600;margin-right:8px">${key})</span>${proseToHTML(normalizeTex(cbody))}`;
+          const text = maybeInlineMath(normalizeTex(cbody));
+          btn.innerHTML = `<span class="choice-key">${key})</span><span class="choice-text">${text}</span>`;
         }
 
         btn.onclick = () => submitAnswer(key);
@@ -205,7 +232,7 @@
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
-      await typeset();
+      await typeset();  // typeset inline math in prose/choices
     }catch(e){
       console.error(e);
       $('#status').textContent = `Failed to load question: ${e.message}`;
@@ -241,6 +268,7 @@
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
