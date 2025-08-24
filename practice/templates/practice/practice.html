@@ -15,9 +15,17 @@
   /* Dark text in the white card */
   #qCard, #qCard * { color:#0f172a; }
 
-  /* Embedded PDFs compiled by the server */
-  .latex-pdf { width:100%; height:240px; border:0; display:block; }
-  .latex-pdf.choice { height:76px; } /* smaller for answers */
+  /* Embedded PDFs compiled by the server (responsive heights) */
+  .latex-pdf { 
+    width:100%; 
+    height: clamp(320px, 42vw, 560px);   /* grow with viewport width */
+    border:0; 
+    display:block; 
+  }
+
+  .latex-pdf.choice { 
+    height: clamp(84px, 12vw, 160px);    /* options get a smaller but flexible box */
+  }
 
   /* Pretty choice buttons */
   .choice-btn{
