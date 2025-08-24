@@ -1,158 +1,197 @@
-{% extends "base.html" %}
-{% block title %}Practice | Wrong-Answer Packets{% endblock %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Student Practice (POC)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Arial; max-width: 760px; margin: 24px auto; padding: 0 12px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; }
+    button.choice { display: block; width: 100%; text-align: left; margin: 8px 0; }
+    .ok { color: #0a0; } .err { color: #c00; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input[type="text"] { padding: 8px 10px; border: 1px solid #ccc; border-radius: 8px; }
+    .spacer { flex: 1; }
 
-{% block content %}
-<h1 class="text-3xl font-semibold mb-6 text-white drop-shadow">
-  Practice <span id="subjectLabel" class="text-gray-300 text-lg"></span>
-</h1>
+    /* Embed for server-rendered LaTeX PDFs */
+    .latex-embed { width: 100%; height: 520px; border: 0; display: block; }
+    .latex-embed.choice { height: 84px; }
+  </style>
 
-<style>
-  #qCard mjx-container { line-height: 1.6; }
-  #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
-  #qCard mjx-container:not([display="true"]) { display:inline; }
-  #qCard, #qCard * { color:#0f172a; } /* dark ink */
-  .latex-pdf { width:100%; height:220px; border:0; display:block; }
-  .latex-pdf.choice { height:64px; } /* smaller for options */
-</style>
+  <!-- MathJax for plain inline math (does nothing for PDF embeds) -->
+  <script>
+    window.MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+  <h1>Student Practice (Proof of Concept)</h1>
 
-<div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
-  <div id="stem" class="text-lg mb-4 whitespace-normal leading-7"></div>
-  <div id="choices" class="space-y-2"></div>
-  <div id="feedback" class="mt-4 font-semibold"></div>
-  <div class="mt-6 flex items-center gap-3">
-    <button id="nextBtn" class="inline-flex items-center justify-center px-4 py-2 rounded-xl
-      border border-gray-200 bg-white/90 text-ink transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      Next ▶
-    </button>
-    <a href="/dashboard/" class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700">
-      Back to Dashboard
-    </a>
+  <div class="card">
+    <div class="row">
+      <div>Signed in as <strong>{{ me_name }}</strong></div>
+      <div class="spacer"></div>
+      <label>Tag (optional):</label>
+      <input id="tag" type="text" placeholder="e.g. Statistics" />
+      <button id="startBtn">Start Practice</button>
+      <a href="/teacher/" target="_blank">Open Teacher View</a>
+      <form method="post" action="{% url 'logout' %}" style="margin-left:8px; display:inline;">
+        {% csrf_token %}
+        <button type="submit" style="background:none;border:none;padding:0;color:#06c;text-decoration:underline;cursor:pointer;font:inherit;">
+          Log out
+        </button>
+      </form>
+    </div>
+    <p class="muted">Student ID: <strong>{{ me_sid }}</strong></p>
+    <div id="status" style="margin-top:8px;color:#555;"></div>
   </div>
-</div>
 
-<div id="status" class="mt-4 text-white/80"></div>
-{% endblock %}
+  <div id="qCard" class="card" style="display:none;">
+    <div id="stem" style="font-size: 1.1rem; margin-bottom: 10px;"></div>
+    <div id="choices"></div>
+    <div id="feedback" style="margin-top:10px; font-weight: 600;"></div>
+    <div style="margin-top:12px;">
+      <button id="nextBtn">Next Question</button>
+    </div>
+  </div>
 
-{% block scripts %}
-<script>
-const $ = s => document.querySelector(s);
-let attemptId=null, currentQ=null;
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    let attemptId = null, currentQ = null;
 
-function qp(name){
-  const m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
-  return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
-}
-
-function normalizeTex(s){
-  if(!s) return '';
-  return s.replace(/<br\s*\/?>/gi,' ')
-          .replace(/\\\\(?!\[|\(|\{)/g,' ')
-          .replace(/\s*\n+\s*/g,' ')
-          .replace(/\s{2,}/g,' ')
-          .trim();
-}
-
-function needsFullLaTeX(s){
-  return !!s && /\\begin\{(tabular|array|align\*?|tcolorbox|tikzpicture|axis)\}|\\includegraphics/.test(s);
-}
-
-function getCookie(name){
-  const v = `; ${document.cookie}`.split(`; ${name}=`);
-  return v.length === 2 ? v.pop().split(';').shift() : undefined;
-}
-const csrftoken = getCookie('csrftoken');
-
-async function api(url, opts={}){
-  const o = Object.assign({headers:{}}, opts);
-  if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
-  if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
-  const res = await fetch(url, o);
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-async function typeset(){
-  if(window.MathJax?.typesetPromise) await MathJax.typesetPromise([$('#qCard')]);
-}
-
-async function startPractice(){
-  const tag = qp('tag');
-  if(!tag){ location.href='/dashboard/'; return; }
-  $('#subjectLabel').textContent = '— ' + tag;
-
-  try{
-    const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
-    attemptId = data.attempt_id;
-    await loadQuestion(tag);
-  }catch(err){ $('#status').textContent = `Failed to start: ${err.message}`; }
-}
-
-async function loadQuestion(tag){
-  $('#qCard').classList.remove('hidden');
-  try{
-    const qRes = await api(`/api/questions/?limit=1&tag=${encodeURIComponent(tag)}`);
-    if(!qRes.count){
-      $('#stem').innerHTML = `No questions found for <strong>${tag}</strong>.`;
-      $('#choices').innerHTML = ''; $('#feedback').textContent=''; $('#status').textContent='';
-      await typeset(); return;
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
     }
-    currentQ = qRes.questions[0];
+    const csrftoken = getCookie('csrftoken');
 
-    // STEM
-    const stem = currentQ.stem_md || '';
-    if(needsFullLaTeX(stem)){
-      const src = `/practice/tex/pdf/?tex=${encodeURIComponent(stem)}`;
-      $('#stem').innerHTML = `<object class="latex-pdf" data="${src}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf"></object>`;
-    }else{
-      $('#stem').innerHTML = normalizeTex(stem);
+    async function api(url, opts = {}) {
+      const o = Object.assign({ headers: {} }, opts);
+      if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type'] = 'application/json';
+      if (opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
+      const res = await fetch(url, o);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
     }
 
-    // CHOICES
-    const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
-    const choices = currentQ.choices || {};
-    for(const [key,label] of Object.entries(choices)){
-      const raw = label || '';
-      const btn = document.createElement('button');
-      btn.className = "w-full text-left rounded-xl px-4 py-3 border border-gray-200 bg-white/90 hover:shadow-md";
-      if(needsFullLaTeX(raw)){
-        const src = `/practice/tex/pdf/?tex=${encodeURIComponent(raw)}`;
-        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span>
-                         <object class="latex-pdf choice" data="${src}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf"></object>`;
-      }else{
-        btn.innerHTML = `<span class="font-semibold mr-2">${key})</span> ${normalizeTex(raw)}`;
+    async function typeset() {
+      const card = $('#qCard');
+      if (window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
+    }
+
+    function normalizeInline(s) {
+      if (!s) return '';
+      return s.replace(/<br\s*\/?>/gi,' ')
+              .replace(/\\\\(?!\[|\(|\{)/g,' ')
+              .replace(/\s*\n+\s*/g,' ')
+              .replace(/\s{2,}/g,' ')
+              .trim();
+    }
+
+    // If stem/choice contains a *full* LaTeX doc or heavy envs, we compile server-side
+    function needsFullLaTeX(s) {
+      return !!s && ( /\\documentclass/.test(s) ||
+        /\\begin\{(tikzpicture|tabular|array|align\*?|tcolorbox|axis)\}/.test(s) ||
+        /\\includegraphics/.test(s) );
+    }
+
+    async function startPractice() {
+      try {
+        const data = await api('/api/attempts/', { method: 'POST', body: JSON.stringify({ assignment_title: 'Practice' }) });
+        attemptId = data.attempt_id;
+        $('#status').textContent = `Attempt #${attemptId} started.`;
+        await loadQuestion();
+      } catch (err) {
+        $('#status').textContent = `Failed to start: ${err.message}`;
       }
-      btn.onclick = () => submitAnswer(key);
-      choicesDiv.appendChild(btn);
     }
-    $('#feedback').textContent = ''; $('#status').textContent = '';
-    await typeset();
-  }catch(err){
-    $('#status').textContent = `Failed to load question: ${err.message}`;
-    $('#stem').innerHTML = ''; $('#choices').innerHTML = ''; $('#feedback').textContent = '';
-  }
-}
 
-async function submitAnswer(choiceKey){
-  if(!attemptId || !currentQ) return;
-  try{
-    const res = await api(`/api/attempts/${attemptId}/items/`, {
-      method:'POST',
-      body: JSON.stringify({ question_id: currentQ.id, answer:{ choice: choiceKey } })
-    });
-    const ok = !!res.is_correct;
-    $('#feedback').textContent = ok ? '✅ Correct' : '❌ Incorrect';
-    $('#feedback').className = ok ? 'mt-4 font-semibold text-green-600'
-                                  : 'mt-4 font-semibold text-red-600';
-  }catch(err){
-    $('#feedback').textContent = `Submit failed: ${err.message}`;
-    $('#feedback').className = 'mt-4 font-semibold text-red-600';
-  }
-}
+    async function loadQuestion() {
+      $('#qCard').style.display = 'block';
 
-$('#nextBtn').addEventListener('click', () => loadQuestion(qp('tag')));
-document.addEventListener('DOMContentLoaded', startPractice);
-</script>
-{% endblock %}
+      try {
+        const tag = $('#tag').value.trim();
+        const url = `/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`;
+        const qRes = await api(url);
+
+        if (!qRes.count) {
+          $('#stem').innerHTML = 'No questions found. Add some in <code>/admin</code> or clear the tag.';
+          $('#choices').innerHTML = '';
+          $('#feedback').textContent = '';
+          $('#status').textContent = 'No questions found.';
+          await typeset();
+          return;
+        }
+
+        currentQ = qRes.questions[0];
+
+        // --- STEM ---
+        const rawStem = currentQ.stem_md || '';
+        if (needsFullLaTeX(rawStem)) {
+          const src = `/practice/tex/pdf/?tex=${encodeURIComponent(rawStem)}`;
+          // Use <iframe> (more reliable than <object> in some browsers)
+          $('#stem').innerHTML =
+            `<iframe class="latex-embed" src="${src}#toolbar=0&navpanes=0&scrollbar=0"></iframe>
+             <div style="margin-top:6px;"><a href="${src}" target="_blank" rel="noopener">Open as PDF</a></div>`;
+        } else {
+          $('#stem').innerHTML = normalizeInline(rawStem);
+        }
+
+        // --- CHOICES ---
+        const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
+        const choices = currentQ.choices || {};
+        for (const [key, label] of Object.entries(choices)) {
+          const raw = label || '';
+          const btn = document.createElement('button');
+          btn.className = 'choice';
+
+          if (needsFullLaTeX(raw)) {
+            const src = `/practice/tex/pdf/?tex=${encodeURIComponent(raw)}`;
+            btn.innerHTML = `<span style="font-weight:600;margin-right:8px;">${key})</span>
+                             <iframe class="latex-embed choice" src="${src}#toolbar=0&navpanes=0&scrollbar=0"></iframe>`;
+          } else {
+            btn.innerHTML = `<span style="font-weight:600;margin-right:8px;">${key})</span> ${normalizeInline(raw)}`;
+          }
+          btn.onclick = () => submitAnswer(key);
+          choicesDiv.appendChild(btn);
+        }
+
+        $('#feedback').textContent = '';
+        $('#status').textContent = '';
+        await typeset();
+
+      } catch (err) {
+        console.error('loadQuestion error:', err);
+        $('#status').textContent = `Failed to load question: ${err.message}`;
+        $('#stem').innerHTML = '';
+        $('#choices').innerHTML = '';
+        $('#feedback').textContent = '';
+      }
+    }
+
+    async function submitAnswer(choiceKey) {
+      if (!attemptId || !currentQ) return;
+      try {
+        const res = await api(`/api/attempts/${attemptId}/items/`, {
+          method: 'POST',
+          body: JSON.stringify({ question_id: currentQ.id, answer: { choice: choiceKey } })
+        });
+        $('#feedback').textContent = res.is_correct ? '✅ Correct' : '❌ Incorrect';
+        $('#feedback').className = res.is_correct ? 'ok' : 'err';
+      } catch (err) {
+        $('#feedback').textContent = `Submit failed: ${err.message}`;
+        $('#feedback').className = 'err';
+      }
+    }
+
+    $('#startBtn').addEventListener('click', startPractice);
+    $('#nextBtn').addEventListener('click', loadQuestion);
+  </script>
+</body>
+</html>
+
 
 
 
