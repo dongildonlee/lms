@@ -131,15 +131,25 @@
 
   // If something looks like bare math, wrap it for MathJax
   function wrapInlineMathIfNeeded(s){
-    if(!s) return s;
+    if (!s) return s;
+
+    // If it's already math, leave it alone: $...$, \(...\), or begin{align|equation|gather}
+    const alreadyWrapped =
+      /\$[^$]+\$/.test(s) ||              // $...$
+      /\\\([^\)]+\\\)/.test(s) ||         // \(...\)
+      /\\begin\{(align|equation|gather)\}/.test(s);
+
+    if (alreadyWrapped) return s;
+
+    // Otherwise, if it looks like math, wrap for MathJax
     const looksMath = /\\[a-zA-Z]+|[_^]|\\sqrt|\\frac|\\cdot|\\times|\\sum|\\int/.test(s);
-    if(!looksMath) return s;                  // leave prose alone
-    // Escape % so it doesn't kill the rest of the line in TeX
-    const escaped = s.replace(/%/g, '\\%');
-    return `\\(${escaped}\\)`;                // inline math for MathJax
+    if (!looksMath) return s;
+
+    const escaped = s.replace(/%/g, '\\%');  // keep TeX comments from swallowing the line
+    return `\\(${escaped}\\)`;
   }
 
-  // Back-compat: old builds referenced maybeInlineMath()
+  // Back-compat for any old code paths:
   const maybeInlineMath = wrapInlineMathIfNeeded;
 
   // POST TeX to server, return blob URL to PDF
