@@ -19,6 +19,12 @@ STANDALONE_WRAPPER = r"""\documentclass{standalone}
 \end{document}
 """
 
+# practice/views_tex.py
+import os, shutil, subprocess, tempfile, textwrap, json, re
+# …existing imports…
+
+BODY_RE = re.compile(r"\\begin\{document\}(.*?)\\end\{document\}", re.S)
+
 @csrf_exempt
 @require_http_methods(["GET","POST"])
 def tex_pdf(request):
@@ -26,7 +32,7 @@ def tex_pdf(request):
     tex = ""
     if request.method == "GET":
         tex = request.GET.get("tex", "") or ""
-    else:  # POST
+    else:
         try:
             payload = json.loads(request.body.decode("utf-8"))
             tex = payload.get("tex", "") or ""
@@ -36,16 +42,23 @@ def tex_pdf(request):
     if not tex.strip():
         return HttpResponseBadRequest("missing tex")
 
-    # normalize EOLs for robust matching
     tex = tex.replace("\r\n", "\n").replace("\r", "\n")
 
-    # If caller sent a full doc but forgot to close, auto-close it
+    # If caller sent a full doc, compile only the document body as 'standalone'
     if "\\documentclass" in tex:
+        # make sure begin/end exist so the regex will work
         if "\\begin{document}" not in tex:
             tex += "\n\\begin{document}\n"
         if "\\end{document}" not in tex:
             tex += "\n\\end{document}\n"
-        full_tex = tex
+
+        m = BODY_RE.search(tex)
+        if m:
+            body = m.group(1)
+            full_tex = STANDALONE_WRAPPER % body
+        else:
+            # fallback: compile as-is (will be a full page)
+            full_tex = tex
     else:
         full_tex = STANDALONE_WRAPPER % tex
 
@@ -71,6 +84,7 @@ def tex_pdf(request):
     resp = HttpResponse(data, content_type="application/pdf")
     resp["Cache-Control"] = "no-store"
     return resp
+
 
 
 
