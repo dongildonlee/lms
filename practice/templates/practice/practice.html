@@ -59,10 +59,11 @@
   }
   const csrftoken = getCookie('csrftoken') || '';
 
-  // === NEW helpers ===========================================================
+  // === helpers ===============================================================
   // Detect “heavy” LaTeX envs
   const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
   const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
+
   function extractFirstHeavyBlock(s){
     const m = s.match(HEAVY_RE);
     if(!m) return null;
@@ -74,6 +75,20 @@
     if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
     return m ? m[1] : s;
+  }
+
+  // Hide preamble-ish lines before the heavy block, and trim control lines after
+  function cleanBefore(s){
+    if(!s) return '';
+    if (/\\documentclass|\\usepackage|\\geometry|\\begin\{document\}/.test(s)) return '';
+    return s;
+  }
+  function cleanAfter(s){
+    if(!s) return '';
+    return s
+      .replace(/\\end\{center\}/g, '')
+      .replace(/\\bigskip/g, '')
+      .replace(/%[=\-]{3,}.*/g, '');  // long %==== separator lines
   }
 
   // Very light HTML rendering for prose (supports **bold** and \textit{})
@@ -157,33 +172,28 @@
       const parts    = extractFirstHeavyBlock(body);
 
       if(parts){
-        // before
-        const beforeHTML = proseToHTML(normalizeTex(parts.before));
-        // heavy block -> PDF
-        const pdfUrl = await fetchPdfBlobUrl(parts.block);
-        // after
-        const afterHTML = proseToHTML(normalizeTex(parts.after));
+        const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
+        const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
+        const pdfUrl     = await fetchPdfBlobUrl(parts.block);
         $('#stem').innerHTML = `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
       }else{
-        // nothing heavy: just prose/math
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
 
-      // -------- CHOICES: same idea, but simpler -----------------------------
+      // -------- CHOICES: same idea -----------------------------------------
       const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
       const choices = currentQ.choices || {};
       for(const [key,label] of Object.entries(choices)){
-        const raw = label || '';
-        const cbody = stripDocBody(raw);
+        const cbody  = stripDocBody(label || '');
         const cparts = extractFirstHeavyBlock(cbody);
 
         const btn = document.createElement('button');
         btn.className = 'choice';
 
         if(cparts){
-          const before = proseToHTML(normalizeTex(cparts.before));
+          const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
+          const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
-          const after  = proseToHTML(normalizeTex(cparts.after));
           btn.innerHTML = `<span style="font-weight:600;margin-right:8px">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
         }else{
           btn.innerHTML = `<span style="font-weight:600;margin-right:8px">${key})</span>${proseToHTML(normalizeTex(cbody))}`;
@@ -225,14 +235,13 @@
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
-
-
 <!-- MathJax for light inline TeX -->
 <script>
   window.MathJax = { tex:{ inlineMath:[['$','$'],['\\(','\\)']] }, svg:{ fontCache:'global' } };
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
