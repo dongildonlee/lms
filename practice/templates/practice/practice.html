@@ -80,7 +80,6 @@
   const csrftoken = getCookie('csrftoken') || '';
 
   // === helpers ===============================================================
-  // Detect “heavy” LaTeX envs
   const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
   const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
 
@@ -90,14 +89,12 @@
     return { before: s.slice(0, m.index), block: m[0], after: s.slice(m.index + m[0].length) };
   }
 
-  // Keep only the document body if a full doc was pasted
   function stripDocBody(s){
     if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
     return m ? m[1] : s;
   }
 
-  // Clean prose around heavy block
   function cleanBefore(s){
     if(!s) return '';
     if (/\\documentclass|\\usepackage|\\geometry|\\begin\{document\}/.test(s)) return '';
@@ -108,7 +105,6 @@
     return s.replace(/\\end\{center\}/g,'').replace(/\\bigskip/g,'').replace(/%[=\-]{3,}.*/g,'');
   }
 
-  // Very light HTML rendering for prose (also handles \emph{} / \textbf{})
   function escapeHTML(x){ return (x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function proseToHTML(s){
     let h = escapeHTML(s || '');
@@ -120,7 +116,6 @@
     return h.trim();
   }
 
-  // Normalize trivial TeX whitespace
   function normalizeTex(s){
     if(!s) return '';
     return s.replace(/\\\\\s*/g,' ')
@@ -129,30 +124,17 @@
             .trim();
   }
 
-  // If something looks like bare math, wrap it for MathJax
+  // Wrap bare math for MathJax (but don’t touch text already wrapped)
   function wrapInlineMathIfNeeded(s){
     if (!s) return s;
-
-    // If it's already math, leave it alone: $...$, \(...\), or begin{align|equation|gather}
     const alreadyWrapped =
-      /\$[^$]+\$/.test(s) ||              // $...$
-      /\\\([^\)]+\\\)/.test(s) ||         // \(...\)
-      /\\begin\{(align|equation|gather)\}/.test(s);
-
+      /\$[^$]+\$/.test(s) || /\\\([^)]+\\\)/.test(s) || /\\begin\{(align|equation|gather)\}/.test(s);
     if (alreadyWrapped) return s;
-
-    // Otherwise, if it looks like math, wrap for MathJax
     const looksMath = /\\[a-zA-Z]+|[_^]|\\sqrt|\\frac|\\cdot|\\times|\\sum|\\int/.test(s);
     if (!looksMath) return s;
-
-    const escaped = s.replace(/%/g, '\\%');  // keep TeX comments from swallowing the line
-    return `\\(${escaped}\\)`;
+    return `\\(${s.replace(/%/g, '\\%')}\\)`;
   }
 
-  // Back-compat for any old code paths:
-  const maybeInlineMath = wrapInlineMathIfNeeded;
-
-  // POST TeX to server, return blob URL to PDF
   async function fetchPdfBlobUrl(tex){
     const res = await fetch('/practice/tex/pdf/', {
       method: 'POST',
@@ -168,21 +150,50 @@
     return URL.createObjectURL(blob);
   }
 
-  async function typeset(){
-    const card = $('#qCard');
-    if(window.MathJax?.typesetPromise && card) await MathJax.typesetPromise([card]);
+  // ---- MathJax readiness + typeset + fallback ------------------------------
+  async function ensureMathJaxReady() {
+    if (window.MathJax?.typesetPromise) return;
+    await new Promise(resolve => {
+      const deadline = Date.now() + 8000;
+      (function poll(){
+        if (window.MathJax?.typesetPromise || Date.now() > deadline) return resolve();
+        setTimeout(poll, 50);
+      })();
+    });
   }
 
+  async function typeset(target = document.querySelector('#qCard')){
+    await ensureMathJaxReady();
+    if (window.MathJax?.typesetPromise && target) {
+      await MathJax.typesetPromise([target]);
+    }
+  }
+
+  async function fallbackInlineRender(){
+    if (!window.MathJax?.tex2svgPromise) return;
+    const nodes = document.querySelectorAll('#stem, .choice-text');
+    for (const n of nodes) {
+      const t = (n.textContent || '').trim();
+      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);
+      if (!m) continue;
+      try {
+        const svg = await MathJax.tex2svgPromise(m[0], { display:false });
+        n.innerHTML = svg.outerHTML;
+      } catch {}
+    }
+  }
+
+  // ---- API ------------------------------------------------------------------
   async function api(url, opts={}){
     const o = Object.assign({ headers:{} }, opts);
-    if(!o.headers['Content-Type'] && o.body) o.headers['Content-Type']='application/json';
-    if(opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
+    if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type']='application/json';
+    if (opts.method === 'POST') o.headers['X-CSRFToken'] = csrftoken;
     const r = await fetch(url, o);
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   }
 
-  // === Flow =================================================================
+  // ---- Flow -----------------------------------------------------------------
   async function startPractice(){
     try{
       const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
@@ -209,7 +220,7 @@
 
       currentQ = qRes.questions[0];
 
-      // -------- STEM: compile ONLY the heavy block (e.g., tikzpicture) ------
+      // ---- STEM -------------------------------------------------------------
       const rawStem  = currentQ.stem_md || '';
       const body     = stripDocBody(rawStem);
       const parts    = extractFirstHeavyBlock(body);
@@ -223,13 +234,12 @@
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
 
-      // -------- CHOICES: pretty buttons, MathJax for light math -------------
+      // ---- CHOICES ----------------------------------------------------------
       const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
       const choices = currentQ.choices || {};
-      for(const [key,label] of Object.entries(choices)){
+      for (const [key,label] of Object.entries(choices)){
         const cbody  = stripDocBody(label || '');
         const cparts = extractFirstHeavyBlock(cbody);
-
         const btn = document.createElement('button');
         btn.className = 'choice-btn';
 
@@ -239,16 +249,12 @@
           const url    = await fetchPdfBlobUrl(cparts.block);
           btn.innerHTML = `<span class="choice-key">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
         } else {
-          const rawText = normalizeTex(cbody);
+          const rawText  = normalizeTex(cbody);
           const maybeMath = wrapInlineMathIfNeeded(rawText);
-          // If we wrapped it, feed MathJax; otherwise render prose (emph/textbf)
-          if (maybeMath.startsWith('\\(')) {
-            btn.innerHTML =
-              `<span class="choice-key">${key})</span><span class="choice-text">${maybeMath}</span>`;
-          } else {
-            btn.innerHTML =
-              `<span class="choice-key">${key})</span><span class="choice-text">${proseToHTML(rawText)}</span>`;
-          }
+          btn.innerHTML =
+            `<span class="choice-key">${key})</span><span class="choice-text">${
+              maybeMath.startsWith('\\(') ? maybeMath : proseToHTML(rawText)
+            }</span>`;
         }
 
         btn.onclick = () => submitAnswer(key);
@@ -257,7 +263,8 @@
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
-      await typeset();  // typeset inline math in prose/choices
+      await typeset();
+      await fallbackInlineRender();
     }catch(e){
       console.error(e);
       $('#status').textContent = `Failed to load question: ${e.message}`;
@@ -283,81 +290,7 @@
     }
   }
 
-  // 1) Wait for MathJax to be ready (handles “async” script load)
-  async function ensureMathJaxReady() {
-    if (window.MathJax?.typesetPromise) return;
-    await new Promise(resolve => {
-      const deadline = Date.now() + 8000; // 8s safety cap
-      (function poll() {
-        if (window.MathJax?.typesetPromise || Date.now() > deadline) return resolve();
-        setTimeout(poll, 50);
-      })();
-    });
-  }
-
-  // 2) Typeset the target (defaults to the whole card)
-  async function typeset(target = document.querySelector('#qCard')) {
-    await ensureMathJaxReady();
-    if (window.MathJax?.typesetPromise && target) {
-      await MathJax.typesetPromise([target]);
-    }
-  }
-
-  // 3) Fallback: directly convert any inline TeX nodes that slipped through
-  async function fallbackInlineRender() {
-    if (!window.MathJax?.tex2svgPromise) return;
-    const nodes = document.querySelectorAll('#stem, .choice-text');
-    for (const n of nodes) {
-      const t = (n.textContent || '').trim();
-      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);   // $...$ or \(...\)
-      if (!m) continue;
-      try {
-        const svg = await MathJax.tex2svgPromise(m[0], { display: false });
-        n.innerHTML = svg.outerHTML;
-      } catch { /* ignore, keep text */ }
-    }
-  }
-
-  async function ensureMathJaxReady() {
-    if (window.MathJax?.typesetPromise) return;
-    await new Promise(resolve => {
-      const deadline = Date.now() + 8000; // 8s safety cap
-      (function poll() {
-        if (window.MathJax?.typesetPromise || Date.now() > deadline) return resolve();
-        setTimeout(poll, 50);
-      })();
-    });
-  }
-
-  // 2) Typeset the target (defaults to the whole card)
-  async function typeset(target = document.querySelector('#qCard')) {
-    await ensureMathJaxReady();
-    if (window.MathJax?.typesetPromise && target) {
-      await MathJax.typesetPromise([target]);
-    }
-  }
-
-  // 3) Fallback: directly convert any inline TeX nodes that slipped through
-  async function fallbackInlineRender() {
-    if (!window.MathJax?.tex2svgPromise) return;
-    const nodes = document.querySelectorAll('#stem, .choice-text');
-    for (const n of nodes) {
-      const t = (n.textContent || '').trim();
-      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);   // $...$ or \(...\)
-      if (!m) continue;
-      try {
-        const svg = await MathJax.tex2svgPromise(m[0], { display: false });
-        n.innerHTML = svg.outerHTML;
-      } catch { /* ignore, keep text */ }
-    }
-  }
-</script>
-
-
-
-
-
-  // kick off if this page is the practice/problems page
+  // Kick off
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
@@ -367,7 +300,6 @@
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
-
 
 
 
