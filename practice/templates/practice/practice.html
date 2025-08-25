@@ -252,20 +252,35 @@
           const rawText   = normalizeTex(cbody);
           const maybeMath = wrapInlineMathIfNeeded(rawText);
 
-          // It's math if: we wrapped (\(...\)) OR it already has $...$ OR already \(...\)
+          // is it already $...$, \(...\), or did we wrap it with \(...\)?
           const isMath =
-            maybeMath.startsWith('\\(') ||
             /\$[^$]+\$/.test(rawText) ||
-            /\\\([^)]+\\\)/.test(rawText);
+            /\\\([^)]+\\\)/.test(rawText) ||
+            maybeMath.startsWith('\\(');
 
-          btn.innerHTML =
-            `<span class="choice-key">${key})</span>` +
-            `<span class="choice-text">${isMath ? maybeMath : proseToHTML(rawText)}</span>`;
+          const keySpan  = document.createElement('span');
+          keySpan.className = 'choice-key';
+          keySpan.textContent = `${key}) `;
+
+          const txtSpan  = document.createElement('span');
+          txtSpan.className = 'choice-text';
+
+          if (isMath) {
+            // IMPORTANT: use textContent so MathJax sees the raw TeX
+            txtSpan.textContent = maybeMath;
+          } else {
+            // Only prose gets HTML formatting (emph/bold)
+            txtSpan.innerHTML = proseToHTML(rawText);
+          }
+
+          btn.replaceChildren(keySpan, txtSpan);
         }
 
         btn.onclick = () => submitAnswer(key);
         choicesDiv.appendChild(btn);
       }
+
+      await typeset(document.querySelector('#choices'));
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
