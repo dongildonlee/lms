@@ -203,10 +203,10 @@
     try{
       const tag = new URLSearchParams(location.search).get('tag') || '';
       const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
-            (tag ? `&tag=${encodeURIComponent(tag)}` : '');
-      // Ask for more than one so we can pick deterministically if the API doesn’t order:
-      const qRes = await api(`/api/questions/?limit=50${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`);
-      if(!qRes.count){
+                  (tag ? `&tag=${encodeURIComponent(tag)}` : '');
+      const qRes = await api(url);
+
+      if (!qRes.count || !qRes.questions?.length) {
         $('#stem').innerHTML = 'No questions found.';
         $('#choices').innerHTML = '';
         $('#feedback').textContent = '';
@@ -214,11 +214,10 @@
         return;
       }
 
-      // Deterministic pick: the smallest id from the batch
-      const list = (qRes.questions || []).slice().sort((a,b)=>a.id - b.id);
-      currentQ = list[0];
-      qTotal = qRes.count || qTotal;
-      qOffset = (qOffset + 1) % Math.max(qTotal, 1);
+      currentQ = qRes.questions[0];
+      qTotal   = qRes.count || qTotal;
+      qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
+
 
       // ---- STEM (heavy block → PDF) -----------------------------------------
       const rawStem  = currentQ.stem_md || '';
@@ -322,7 +321,7 @@
       $('#feedback').className   = 'err';
     }
   }
-
+  document.getElementById('nextBtn')?.addEventListener('click', loadQuestion);
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
