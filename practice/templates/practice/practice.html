@@ -19,7 +19,7 @@
   .latex-pdf { width:100%; height:240px; border:0; display:block; }
   .latex-pdf.choice { height:76px; } /* smaller for answers */
 
-  /* Pretty choice buttons (consistent look) */
+  /* Pretty choice buttons */
   .choice-btn{
     width:100%;
     text-align:left;
@@ -34,10 +34,7 @@
     box-shadow:0 8px 18px rgba(2,6,23,.08);
     background:#fff;
   }
-  .choice-key{
-    font-weight:600;
-    margin-right:.5rem;
-  }
+  .choice-key{ font-weight:600; margin-right:.5rem; }
 </style>
 
 <div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
@@ -80,7 +77,6 @@
   const csrftoken = getCookie('csrftoken') || '';
 
   // === helpers ===============================================================
-  // Detect “heavy” LaTeX envs (use server PDF)
   const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
   const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
 
@@ -128,7 +124,7 @@
             .trim();
   }
 
-  // Wrap bare math for MathJax (don’t touch already-wrapped)
+  // Wrap bare math for MathJax (don’t touch text that’s already wrapped)
   function wrapInlineMathIfNeeded(s){
     if (!s) return s;
     const alreadyWrapped =
@@ -154,7 +150,7 @@
     return URL.createObjectURL(blob);
   }
 
-  // ---- MathJax readiness + typeset + fallback ------------------------------
+  // ---- MathJax: manual typeset (deterministic) ------------------------------
   async function ensureMathJaxReady() {
     if (window.MathJax?.typesetPromise) return;
     await new Promise(resolve => {
@@ -165,38 +161,11 @@
       })();
     });
   }
-
   async function typeset(target = document.querySelector('#qCard')){
     await ensureMathJaxReady();
     if (window.MathJax?.typesetPromise && target) {
       await MathJax.typesetPromise([target]);
     }
-  }
-
-  async function fallbackInlineRender(){
-    if (!window.MathJax?.tex2svgPromise) return;
-    const nodes = document.querySelectorAll('#stem, .choice-text');
-    for (const n of nodes) {
-      const t = (n.textContent || '').trim();
-      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);
-      if (!m) continue;
-      try {
-        const svg = await MathJax.tex2svgPromise(m[0], { display:false });
-        n.innerHTML = svg.outerHTML;
-      } catch {}
-    }
-  }
-
-  // ---- Deterministic question selection (pin ?qid=) ------------------------
-  function getQidFromUrl(){
-    const p = new URLSearchParams(location.search);
-    return p.get('qid');
-  }
-  function setQidInUrl(qid){
-    const u = new URL(location.href);
-    if (qid) u.searchParams.set('qid', qid);
-    else u.searchParams.delete('qid');
-    history.replaceState(null, '', u);
   }
 
   // ---- API ------------------------------------------------------------------
@@ -223,39 +192,27 @@
     }
   }
 
-  async function loadQuestion(forceNew=false){
+  async function loadQuestion(){
     $('#qCard')?.classList.remove('hidden');
     $('#qCard').style.display='block';
 
     try{
-      let q = null;
-
-      // 1) Use pinned qid unless forcing a new one
-      const qid = (!forceNew && getQidFromUrl()) || null;
-      if (qid) {
-        try { q = await api(`/api/questions/${qid}/`); } catch (_) {}
+      const tag = new URLSearchParams(location.search).get('tag') || '';
+      // Ask for more than one so we can pick deterministically if the API doesn’t order:
+      const qRes = await api(`/api/questions/?limit=50${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`);
+      if(!qRes.count){
+        $('#stem').innerHTML = 'No questions found.';
+        $('#choices').innerHTML = '';
+        $('#feedback').textContent = '';
+        await typeset();
+        return;
       }
 
-      // 2) Otherwise fetch one and pin its id
-      if (!q) {
-        const tag = new URLSearchParams(location.search).get('tag') || '';
-        const listUrl = `/api/questions/?limit=1${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`;
-        const qRes = await api(listUrl);
-        if(!qRes.count){
-          $('#stem').innerHTML = 'No questions found.';
-          $('#choices').innerHTML = '';
-          $('#feedback').textContent = '';
-          await typeset();
-          await fallbackInlineRender();
-          return;
-        }
-        q = qRes.questions[0];
-        setQidInUrl(q.id); // pin it for refresh/login stability
-      }
+      // Deterministic pick: the smallest id from the batch
+      const list = (qRes.questions || []).slice().sort((a,b)=>a.id - b.id);
+      currentQ = list[0];
 
-      currentQ = q;
-
-      // ---- STEM -------------------------------------------------------------
+      // ---- STEM (heavy block → PDF) -----------------------------------------
       const rawStem  = currentQ.stem_md || '';
       const body     = stripDocBody(rawStem);
       const parts    = extractFirstHeavyBlock(body);
@@ -271,24 +228,26 @@
       }
       await typeset($('#stem'));
 
-      // ---- CHOICES (deterministic order: A..E) ---------------------------------
-      const choicesDiv = $('#choices'); 
-      choicesDiv.innerHTML = '';
-
+      // ---- CHOICES (fixed A–E order) ---------------------------------------
+      const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
       const choices = currentQ.choices || {};
-      const stableKeys = ['A','B','C','D','E','F','G']; // will skip missing keys
 
-      for (const key of stableKeys) {
-        if (!(key in choices)) continue;
+      const preferred = ['A','B','C','D','E'];
+      let entries = preferred.filter(k => Object.prototype.hasOwnProperty.call(choices, k))
+                             .map(k => [k, choices[k]]);
+      if (entries.length === 0) {
+        // fallback: sort whatever keys exist so it’s stable
+        entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
+      }
 
-        const label  = choices[key] || '';
-        const cbody  = stripDocBody(label);
+      for (const [key,label] of entries){
+        const cbody  = stripDocBody(label || '');
         const cparts = extractFirstHeavyBlock(cbody);
 
         const btn = document.createElement('button');
         btn.className = 'choice-btn';
 
-        if (cparts) {
+        if(cparts){
           const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
           const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
@@ -300,22 +259,23 @@
           const rawText   = normalizeTex(cbody);
           const maybeMath = wrapInlineMathIfNeeded(rawText);
 
-          const keySpan = document.createElement('span');
+          const keySpan  = document.createElement('span');
           keySpan.className = 'choice-key';
           keySpan.textContent = `${key}) `;
 
-          const txtSpan = document.createElement('span');
+          const txtSpan  = document.createElement('span');
           txtSpan.className = 'choice-text';
 
+          // If it looks like math (already wrapped or we wrapped), use textContent so MJ sees the TeX.
           const isMath =
             /\$[^$]+\$/.test(rawText) ||
             /\\\([^)]+\\\)/.test(rawText) ||
             maybeMath.startsWith('\\(');
 
           if (isMath) {
-            txtSpan.textContent = maybeMath;   // let MathJax handle TeX
+            txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
           } else {
-            txtSpan.innerHTML = proseToHTML(rawText);
+            txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
           }
 
           btn.replaceChildren(keySpan, txtSpan);
@@ -324,10 +284,9 @@
         btn.onclick = () => submitAnswer(key);
         choicesDiv.appendChild(btn);
       }
-      await typeset(choicesDiv);
 
+      // Typeset all choices once (deterministic)
       await typeset(choicesDiv);
-      await fallbackInlineRender();
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
@@ -356,17 +315,10 @@
     }
   }
 
-  // Wire up "Next" to fetch a new question and re-pin its id
-  $('#nextBtn')?.addEventListener('click', () => {
-    setQidInUrl(null);
-    loadQuestion(true);
-  });
-
-  // Kick off
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
-<!-- MathJax (we typeset manually for determinism) -->
+<!-- MathJax (manual typeset via startup.typeset=false) -->
 <script>
   window.MathJax = {
     tex: { inlineMath: [['$','$'], ['\\(','\\)']] },
@@ -376,6 +328,7 @@
 </script>
 <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
