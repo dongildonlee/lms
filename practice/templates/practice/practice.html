@@ -249,12 +249,18 @@
           const url    = await fetchPdfBlobUrl(cparts.block);
           btn.innerHTML = `<span class="choice-key">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
         } else {
-          const rawText  = normalizeTex(cbody);
+          const rawText   = normalizeTex(cbody);
           const maybeMath = wrapInlineMathIfNeeded(rawText);
+
+          // It's math if: we wrapped (\(...\)) OR it already has $...$ OR already \(...\)
+          const isMath =
+            maybeMath.startsWith('\\(') ||
+            /\$[^$]+\$/.test(rawText) ||
+            /\\\([^)]+\\\)/.test(rawText);
+
           btn.innerHTML =
-            `<span class="choice-key">${key})</span><span class="choice-text">${
-              maybeMath.startsWith('\\(') ? maybeMath : proseToHTML(rawText)
-            }</span>`;
+            `<span class="choice-key">${key})</span>` +
+            `<span class="choice-text">${isMath ? maybeMath : proseToHTML(rawText)}</span>`;
         }
 
         btn.onclick = () => submitAnswer(key);
