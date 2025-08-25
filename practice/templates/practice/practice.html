@@ -203,6 +203,7 @@
         $('#choices').innerHTML = '';
         $('#feedback').textContent = '';
         await typeset();
+        await fallbackInlineRender();
         return;
       }
 
@@ -281,6 +282,80 @@
       $('#feedback').className   = 'err';
     }
   }
+
+  // 1) Wait for MathJax to be ready (handles “async” script load)
+  async function ensureMathJaxReady() {
+    if (window.MathJax?.typesetPromise) return;
+    await new Promise(resolve => {
+      const deadline = Date.now() + 8000; // 8s safety cap
+      (function poll() {
+        if (window.MathJax?.typesetPromise || Date.now() > deadline) return resolve();
+        setTimeout(poll, 50);
+      })();
+    });
+  }
+
+  // 2) Typeset the target (defaults to the whole card)
+  async function typeset(target = document.querySelector('#qCard')) {
+    await ensureMathJaxReady();
+    if (window.MathJax?.typesetPromise && target) {
+      await MathJax.typesetPromise([target]);
+    }
+  }
+
+  // 3) Fallback: directly convert any inline TeX nodes that slipped through
+  async function fallbackInlineRender() {
+    if (!window.MathJax?.tex2svgPromise) return;
+    const nodes = document.querySelectorAll('#stem, .choice-text');
+    for (const n of nodes) {
+      const t = (n.textContent || '').trim();
+      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);   // $...$ or \(...\)
+      if (!m) continue;
+      try {
+        const svg = await MathJax.tex2svgPromise(m[0], { display: false });
+        n.innerHTML = svg.outerHTML;
+      } catch { /* ignore, keep text */ }
+    }
+  }
+
+  async function ensureMathJaxReady() {
+    if (window.MathJax?.typesetPromise) return;
+    await new Promise(resolve => {
+      const deadline = Date.now() + 8000; // 8s safety cap
+      (function poll() {
+        if (window.MathJax?.typesetPromise || Date.now() > deadline) return resolve();
+        setTimeout(poll, 50);
+      })();
+    });
+  }
+
+  // 2) Typeset the target (defaults to the whole card)
+  async function typeset(target = document.querySelector('#qCard')) {
+    await ensureMathJaxReady();
+    if (window.MathJax?.typesetPromise && target) {
+      await MathJax.typesetPromise([target]);
+    }
+  }
+
+  // 3) Fallback: directly convert any inline TeX nodes that slipped through
+  async function fallbackInlineRender() {
+    if (!window.MathJax?.tex2svgPromise) return;
+    const nodes = document.querySelectorAll('#stem, .choice-text');
+    for (const n of nodes) {
+      const t = (n.textContent || '').trim();
+      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);   // $...$ or \(...\)
+      if (!m) continue;
+      try {
+        const svg = await MathJax.tex2svgPromise(m[0], { display: false });
+        n.innerHTML = svg.outerHTML;
+      } catch { /* ignore, keep text */ }
+    }
+  }
+</script>
+
+
+
+
 
   // kick off if this page is the practice/problems page
   document.addEventListener('DOMContentLoaded', startPractice);
