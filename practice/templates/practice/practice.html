@@ -90,6 +90,10 @@
     return { before: s.slice(0, m.index), block: m[0], after: s.slice(m.index + m[0].length) };
   }
 
+  function stripTexComments(s){
+    return (s || '').replace(/^\s*%.*$/gm, '').trim();
+  }
+
   function stripDocBody(s){
     if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
@@ -221,7 +225,7 @@
 
       // ---- STEM (heavy block → PDF) -----------------------------------------
       const rawStem  = currentQ.stem_md || '';
-      const body     = stripDocBody(rawStem);
+      const body     = stripTexComments(stripDocBody(rawStem));
       const parts    = extractFirstHeavyBlock(body);
 
       if(parts){
@@ -248,7 +252,7 @@
       }
 
       for (const [key,label] of entries){
-        const cbody  = stripDocBody(label || '');
+        const cbody  = stripTexComments(stripDocBody(label || ''));
         const cparts = extractFirstHeavyBlock(cbody);
 
         const btn = document.createElement('button');
