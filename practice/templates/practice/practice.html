@@ -6,6 +6,7 @@
   Practice <span id="subjectLabel" class="text-gray-300 text-lg"></span>
 </h1>
 
+
 <style>
   /* Make MathJax inline unless display */
   #qCard mjx-container { line-height: 1.6; }
@@ -67,6 +68,9 @@
   const $ = (sel) => document.querySelector(sel);
   let attemptId = null;
   let currentQ  = null;
+  let qOffset = 0;   // which question to fetch next
+  let qTotal  = 0;   // total questions for the current tag
+
 
   // --- CSRF ---
   function getCookie(name) {
@@ -198,6 +202,8 @@
 
     try{
       const tag = new URLSearchParams(location.search).get('tag') || '';
+      const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
+            (tag ? `&tag=${encodeURIComponent(tag)}` : '');
       // Ask for more than one so we can pick deterministically if the API doesn’t order:
       const qRes = await api(`/api/questions/?limit=50${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`);
       if(!qRes.count){
@@ -211,6 +217,8 @@
       // Deterministic pick: the smallest id from the batch
       const list = (qRes.questions || []).slice().sort((a,b)=>a.id - b.id);
       currentQ = list[0];
+      qTotal = qRes.count || qTotal;
+      qOffset = (qOffset + 1) % Math.max(qTotal, 1);
 
       // ---- STEM (heavy block → PDF) -----------------------------------------
       const rawStem  = currentQ.stem_md || '';
