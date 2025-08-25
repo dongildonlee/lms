@@ -25,13 +25,13 @@
     text-align:left;
     padding:.75rem 1rem;
     border:1px solid #e5e7eb;             /* gray-200 */
-    border-radius: .75rem;                 /* rounded-xl */
-    background: rgba(255,255,255,.9);
-    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+    border-radius:.75rem;                  /* rounded-xl */
+    background:rgba(255,255,255,.9);
+    transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
   }
   .choice-btn:hover{
-    transform: translateY(-2px);
-    box-shadow: 0 8px 18px rgba(2,6,23,.08); /* subtle lift */
+    transform:translateY(-2px);
+    box-shadow:0 8px 18px rgba(2,6,23,.08); /* subtle lift */
     background:#fff;
   }
   .choice-key{
@@ -69,7 +69,7 @@
 <script>
   const $ = (sel) => document.querySelector(sel);
   let attemptId = null;
-  let currentQ = null;
+  let currentQ  = null;
 
   // --- CSRF ---
   function getCookie(name) {
@@ -80,6 +80,7 @@
   const csrftoken = getCookie('csrftoken') || '';
 
   // === helpers ===============================================================
+  // Detect “heavy” LaTeX envs
   const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
   const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
 
@@ -89,12 +90,14 @@
     return { before: s.slice(0, m.index), block: m[0], after: s.slice(m.index + m[0].length) };
   }
 
+  // Keep only the document body if a full doc was pasted
   function stripDocBody(s){
     if(!s) return '';
     const m = s.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
     return m ? m[1] : s;
   }
 
+  // Clean prose around heavy block (drop preamble junk, tidy after)
   function cleanBefore(s){
     if(!s) return '';
     if (/\\documentclass|\\usepackage|\\geometry|\\begin\{document\}/.test(s)) return '';
@@ -102,20 +105,25 @@
   }
   function cleanAfter(s){
     if(!s) return '';
-    return s.replace(/\\end\{center\}/g,'').replace(/\\bigskip/g,'').replace(/%[=\-]{3,}.*/g,'');
+    return s.replace(/\\end\{center\}/g,'')
+            .replace(/\\bigskip/g,'')
+            .replace(/%[=\-]{3,}.*/g,'');
   }
 
+  // Very light HTML rendering for prose (supports \emph{}, \textbf{}, **bold**)
   function escapeHTML(x){ return (x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function proseToHTML(s){
     let h = escapeHTML(s || '');
-    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>');
-    h = h.replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>');
-    h = h.replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
-    h = h.replace(/\n{2,}/g, '<br><br>').replace(/\n/g, ' ');
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+         .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+         .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
+         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
+         .replace(/\n{2,}/g, '<br><br>')
+         .replace(/\n/g, ' ');
     return h.trim();
   }
 
+  // Normalize trivial TeX whitespace
   function normalizeTex(s){
     if(!s) return '';
     return s.replace(/\\\\\s*/g,' ')
@@ -132,9 +140,10 @@
     if (alreadyWrapped) return s;
     const looksMath = /\\[a-zA-Z]+|[_^]|\\sqrt|\\frac|\\cdot|\\times|\\sum|\\int/.test(s);
     if (!looksMath) return s;
-    return `\\(${s.replace(/%/g, '\\%')}\\)`;
+    return `\\(${s.replace(/%/g, '\\%')}\\)`; // escape % to avoid TeX comments
   }
 
+  // POST TeX to server, return blob URL to PDF
   async function fetchPdfBlobUrl(tex){
     const res = await fetch('/practice/tex/pdf/', {
       method: 'POST',
@@ -154,10 +163,10 @@
   async function ensureMathJaxReady() {
     if (window.MathJax?.typesetPromise) return;
     await new Promise(resolve => {
-      const deadline = Date.now() + 8000;
+      const deadline = Date.now() + 8000; // 8s cap
       (function poll(){
         if (window.MathJax?.typesetPromise || Date.now() > deadline) return resolve();
-        setTimeout(poll, 50);
+        setTimeout(poll, 25);
       })();
     });
   }
@@ -174,12 +183,12 @@
     const nodes = document.querySelectorAll('#stem, .choice-text');
     for (const n of nodes) {
       const t = (n.textContent || '').trim();
-      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);
+      const m = t.match(/\$[^$]+\$|\\\([^)]+\\\)/);   // $...$ or \(...\)
       if (!m) continue;
       try {
         const svg = await MathJax.tex2svgPromise(m[0], { display:false });
         n.innerHTML = svg.outerHTML;
-      } catch {}
+      } catch { /* keep text on failure */ }
     }
   }
 
@@ -196,10 +205,15 @@
   // ---- Flow -----------------------------------------------------------------
   async function startPractice(){
     try{
-      const data = await api('/api/attempts/', { method:'POST', body: JSON.stringify({ assignment_title:'Practice' }) });
+      const data = await api('/api/attempts/', {
+        method:'POST',
+        body: JSON.stringify({ assignment_title:'Practice' })
+      });
       attemptId = data.attempt_id;
       await loadQuestion();
-    }catch(e){ $('#status').textContent = `Failed to start: ${e.message}`; }
+    }catch(e){
+      $('#status').textContent = `Failed to start: ${e.message}`;
+    }
   }
 
   async function loadQuestion(){
@@ -229,10 +243,14 @@
         const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
         const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
         const pdfUrl     = await fetchPdfBlobUrl(parts.block);
-        $('#stem').innerHTML = `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
+        $('#stem').innerHTML =
+          `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
       }else{
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
+
+      // Typeset the stem (if it contains inline math)
+      await typeset($('#stem'));
 
       // ---- CHOICES ----------------------------------------------------------
       const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
@@ -247,16 +265,13 @@
           const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
           const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
-          btn.innerHTML = `<span class="choice-key">${key})</span>${before}<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>${after}`;
+          btn.innerHTML =
+            `<span class="choice-key">${key})</span>${before}` +
+            `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
+            `${after}`;
         } else {
           const rawText   = normalizeTex(cbody);
           const maybeMath = wrapInlineMathIfNeeded(rawText);
-
-          // is it already $...$, \(...\), or did we wrap it with \(...\)?
-          const isMath =
-            /\$[^$]+\$/.test(rawText) ||
-            /\\\([^)]+\\\)/.test(rawText) ||
-            maybeMath.startsWith('\\(');
 
           const keySpan  = document.createElement('span');
           keySpan.className = 'choice-key';
@@ -265,12 +280,16 @@
           const txtSpan  = document.createElement('span');
           txtSpan.className = 'choice-text';
 
+          // If it looks like math (already wrapped or we wrapped), use textContent so MJ sees the TeX.
+          const isMath =
+            /\$[^$]+\$/.test(rawText) ||
+            /\\\([^)]+\\\)/.test(rawText) ||
+            maybeMath.startsWith('\\(');
+
           if (isMath) {
-            // IMPORTANT: use textContent so MathJax sees the raw TeX
-            txtSpan.textContent = maybeMath;
+            txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
           } else {
-            // Only prose gets HTML formatting (emph/bold)
-            txtSpan.innerHTML = proseToHTML(rawText);
+            txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
           }
 
           btn.replaceChildren(keySpan, txtSpan);
@@ -280,11 +299,13 @@
         choicesDiv.appendChild(btn);
       }
 
-      await typeset(document.querySelector('#choices'));
+      // Typeset all choices once (deterministic)
+      await typeset(choicesDiv);
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
-      await typeset();
+
+      // Safety fallback if some inline math slipped past
       await fallbackInlineRender();
     }catch(e){
       console.error(e);
@@ -315,12 +336,17 @@
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
-<!-- MathJax for light inline TeX -->
+<!-- MathJax for light inline TeX (deterministic: we call typeset manually) -->
 <script>
-  window.MathJax = { tex:{ inlineMath:[['$','$'],['\\(','\\)']] }, svg:{ fontCache:'global' } };
+  window.MathJax = {
+    tex: { inlineMath: [['$','$'], ['\\(','\\)']] },
+    svg: { fontCache: 'global' },
+    startup: { typeset: false }
+  };
 </script>
-<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+<script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
