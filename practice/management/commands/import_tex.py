@@ -6,6 +6,10 @@ from practice.models import Question, Tag
 from django.contrib.auth.models import User
 
 HEADER_RE = re.compile(r"^%%\s*(\w+)\s*:\s*(.+)$")
+TOKEN_RE = re.compile(
+    r"\\begin\{(enumerate|itemize)\}|\\end\{(enumerate|itemize)\}|\\item\b",
+    re.I | re.M
+)
 ENUM_TOKEN_RE = re.compile(r"(\\begin\{enumerate\})|(\\end\{enumerate\})|(\\item\b)", re.M)
 
 def _trim(s: str) -> str:
@@ -43,44 +47,60 @@ def _parse_nested_choices(block_text: str):
     return out
 
 def _split_top_level_items(body: str):
-    # Return (preamble, items) where preamble is everything before the first
-    # top-level \begin{enumerate}, and items are the top-level \item blocks.
-    m = re.search(r"\\begin\{enumerate\}", body)
+    # Find the first top-level \begin{enumerate}
+    m = re.search(r"\\begin\{enumerate\}", body, re.I)
     if not m:
         return body, []
 
     preamble = body[:m.start()]
-    enum_start = m.start()
-
-    depth = 0
     items = []
-    current_start = None
-    end_index = None
 
-    for tok in ENUM_TOKEN_RE.finditer(body, enum_start):
-        beg, end, item = tok.groups()
-        if beg:
-            depth += 1
+    # Start scanning right after the first \begin{enumerate}
+    pos = m.end()
+    env_stack = ["enumerate"]   # we just entered the top-level enumerate
+    enum_depth = 1              # how many enumerate blocks deep we are
+    current_start = None
+
+    for tok in TOKEN_RE.finditer(body, pos):
+        g = tok.group()
+        m_begin = re.match(r"\\begin\{(enumerate|itemize)\}", g, re.I)
+        m_end   = re.match(r"\\end\{(enumerate|itemize)\}", g, re.I)
+        is_item = g.startswith("\\item")
+
+        if m_begin:
+            env = m_begin.group(1).lower()
+            env_stack.append(env)
+            if env == "enumerate":
+                enum_depth += 1
             continue
-        if end:
-            if depth == 1:
+
+        if m_end:
+            env = m_end.group(1).lower()
+            if env_stack:
+                env_stack.pop()
+            if env == "enumerate":
+                if enum_depth == 1:
+                    # Closing the top-level enumerate: flush last item and stop.
+                    if current_start is not None:
+                        items.append(body[current_start:tok.start()])
+                        current_start = None
+                    break
+                enum_depth -= 1
+            continue
+
+        if is_item:
+            # Only split when we're in the OUTER enumerate (depth 1)
+            if enum_depth == 1 and env_stack and env_stack[-1] == "enumerate":
                 if current_start is not None:
                     items.append(body[current_start:tok.start()])
-                    current_start = None
-                end_index = tok.end()
-                depth -= 1
-                break
-            depth -= 1
-            continue
-        if item and depth == 1:
-            if current_start is not None:
-                items.append(body[current_start:tok.start()])
-            current_start = tok.end()
+                current_start = tok.end()
 
-    if current_start is not None and end_index is None:
+    # Fallback: if we never saw the end, capture to EOF
+    if current_start is not None and not items:
         items.append(body[current_start:len(body)])
 
     return preamble, [_trim(x) for x in items if x.strip()]
+
 
 def _extract_item_stem_and_choices(item_text: str):
     # For one top-level \item:
