@@ -217,7 +217,6 @@
 
   async function loadQuestion(){
     const token = ++renderToken;            // token for this render
-    document.querySelectorAll('object.latex-pdf').forEach(el => el.remove());
     $('#stem').innerHTML = '';              // clear old content immediately
     $('#choices').innerHTML = '';
     $('#feedback').textContent = '';
@@ -366,6 +365,7 @@
 </script>
 <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
