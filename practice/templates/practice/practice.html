@@ -140,36 +140,19 @@
     return s;
   }
 
-  // Convert inline $...$ → \(...\) while preserving $$...$$ as display.
-  function convertInlineDollars(s){
-    if(!s) return s;
-    const displays = [];
-    // Temporarily stash $$...$$
-    s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, c) => {
-      const i = displays.push(c) - 1;
-      return `[[MJXDISPLAY${i}]]`;
-    });
-    // Convert single-dollar pairs to \(...\)
-    s = s.replace(/(^|[^$])\$([^\$]+?)\$(?!\$)/g, (m, pre, c) => `${pre}\\(${c}\\)`);
-    // Restore $$...$$ as \[...\] (explicit display)
-    s = s.replace(/\[\[MJXDISPLAY(\d+)\]\]/g, (_, i) => `\\[${displays[+i]}\\]`);
-    return s;
-  }
-
   function proseToHTML(s){
-    // 1) Robust inline math
-    s = convertInlineDollars(s);
-    // 2) Lists → HTML
+    s = squishSoloInlineMath(s);   // <-- add this line
+    // (the rest unchanged)
     s = maskLatexLists(s);
-    // 3) Escape HTML and collapse ALL newlines to spaces (no <br> anywhere)
-    let h = escapeHTML(s || '').replace(/\s*\n+\s*/g, ' ');
-    // 4) Light formatting
+    let h = escapeHTML(s || '');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
          .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
          .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
-         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
-    // 5) Unmask lists
+         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
+         .replace(/\n{2,}/g, '<br><br>')
+         .replace(/\n/g, ' ');
     return unmaskLists(h).trim();
+  }
 
   function normalizeTex(s){
     if(!s) return '';
