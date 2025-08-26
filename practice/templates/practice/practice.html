@@ -140,6 +140,22 @@
     return s;
   }
 
+  // Convert inline $...$ → \(...\); preserve display $$...$$ as \[...\]
+  function convertInlineDollarMath(s){
+    if(!s) return s;
+    const displays = [];
+    // stash $$...$$ blocks
+    s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, c) => {
+      const i = displays.push(c) - 1;
+      return `[[MJXDISPLAY${i}]]`;
+    });
+    // convert single-dollar pairs to \(...\)
+    s = s.replace(/(^|[^$])\$([^\n$]+?)\$(?!\$)/g, (m, pre, c) => `${pre}\\(${c}\\)`);
+    // restore display as \[...\]
+    s = s.replace(/\[\[MJXDISPLAY(\d+)\]\]/g, (_, i) => `\\[${displays[+i]}\\]`);
+    return s;
+  }
+
   function proseToHTML(s){
     s = squishSoloInlineMath(s);   // <-- add this line
     // (the rest unchanged)
@@ -272,7 +288,7 @@
           `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
       }else{
         if (token !== renderToken) return;
-        $('#stem').innerHTML = proseToHTML(normalizeTex(body));
+        $('#stem').innerHTML = proseToHTML(convertInlineDollarMath(normalizeTex(body)));
       }
       if (token !== renderToken) return;
       await typeset($('#stem'));
@@ -307,7 +323,7 @@
             `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
             `${after}`;
         } else {
-          const rawText   = normalizeTex(cbody);
+          const rawText = convertInlineDollarMath(normalizeTex(cbody));
           const maybeMath = wrapInlineMathIfNeeded(rawText);
 
           const keySpan  = document.createElement('span');
