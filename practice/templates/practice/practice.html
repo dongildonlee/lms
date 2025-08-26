@@ -217,6 +217,7 @@
 
   async function loadQuestion(){
     const token = ++renderToken;            // token for this render
+    document.querySelectorAll('object.latex-pdf').forEach(el => el.remove());
     $('#stem').innerHTML = '';              // clear old content immediately
     $('#choices').innerHTML = '';
     $('#feedback').textContent = '';
