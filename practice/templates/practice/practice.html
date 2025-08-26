@@ -156,13 +156,12 @@
 
   function proseToHTML(s){
     s = maskLatexLists(s);
-    let h = escapeHTML(s || '');
+    // Collapse ALL newlines to spaces so inline $…$ never gets isolated
+    let h = escapeHTML(s || '').replace(/\s*\n+\s*/g, ' ');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
          .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
          .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
-         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
-         .replace(/\n{2,}/g, '<br><br>')
-         .replace(/\n/g, ' ');
+         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
     return unmaskLists(h).trim();
   }
 
