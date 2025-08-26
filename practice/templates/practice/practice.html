@@ -245,127 +245,133 @@
       $('#status').textContent = `Failed to start: ${e.message}`;
     }
   }
-
   async function loadQuestion(){
-    const token = ++renderToken;            // token for this render
-    $('#stem').innerHTML = '';              // clear old content immediately
-    $('#choices').innerHTML = '';
-    $('#feedback').textContent = '';
+  const token = ++renderToken;            // token for this render
 
-    $('#qCard')?.classList.remove('hidden');
-    $('#qCard').style.display='block';
+  // clear previous UI
+  $('#stem').innerHTML = '';
+  $('#choices').innerHTML = '';
+  $('#feedback').textContent = '';
 
-    try{
-      const tag = new URLSearchParams(location.search).get('tag') || '';
-      const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
-                  (tag ? `&tag=${encodeURIComponent(tag)}` : '');
-      const qRes = await api(url);
-      if (token !== renderToken) return;
+  $('#qCard')?.classList.remove('hidden');
+  $('#qCard').style.display='block';
 
-      if (!qRes.count || !qRes.questions?.length) {
-        $('#stem').innerHTML = 'No questions found.';
-        $('#choices').innerHTML = '';
-        $('#feedback').textContent = '';
-        await typeset();
-        return;
-      }
+  try{
+    const tag = new URLSearchParams(location.search).get('tag') || '';
+    const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
+                (tag ? `&tag=${encodeURIComponent(tag)}` : '');
+    const qRes = await api(url);
+    if (token !== renderToken) return;
 
-      currentQ = qRes.questions[0];
-      qTotal   = qRes.count || qTotal;
-      qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
-
-      // ---- STEM (heavy block → PDF) -----------------------------------------
-      const rawStem  = currentQ.stem_md || '';
-      const body     = stripDocBody(rawStem);
-      const parts    = extractFirstHeavyBlock(body);
-
-      if(parts){
-        const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
-        const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
-        const pdfUrl     = await fetchPdfBlobUrl(parts.block);
-        if (token !== renderToken) return;
-        $('#stem').innerHTML =
-          `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
-      }else{
-        if (token !== renderToken) return;
-        $('#stem').innerHTML = proseToHTML(convertInlineDollarMath(normalizeTex(body)));
-      }
-      if (token !== renderToken) return;
-      await typeset($('#stem'));
-      if (token !== renderToken) return;
-
-      // ---- CHOICES (fixed A–E order) ---------------------------------------
-      const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
-      const choices = currentQ.choices || {};
-
-      const preferred = ['A','B','C','D','E'];
-      let entries = preferred.filter(k => Object.prototype.hasOwnProperty.call(choices, k))
-                             .map(k => [k, choices[k]]);
-      if (entries.length === 0) {
-        entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
-      }
-
-      if (token !== renderToken) return;
-      for (const [key,label] of entries){
-        const cbody  = stripDocBody(label || '');
-        const cparts = extractFirstHeavyBlock(cbody);
-
-        const btn = document.createElement('button');
-        btn.className = 'choice-btn';
-
-        if(cparts){
-          const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
-          const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
-          const url    = await fetchPdfBlobUrl(cparts.block);
-          if (token !== renderToken) return;
-          btn.innerHTML =
-            `<span class="choice-key">${key})</span>${before}` +
-            `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
-            `${after}`;
-        } else {
-          const rawText = convertInlineDollarMath(normalizeTex(cbody));
-          const maybeMath = wrapInlineMathIfNeeded(rawText);
-
-          const keySpan  = document.createElement('span');
-          keySpan.className = 'choice-key';
-          keySpan.textContent = `${key}) `;
-
-          const txtSpan  = document.createElement('span');
-          txtSpan.className = 'choice-text';
-
-          const isMath =
-            /\$[^$]+\$/.test(rawText) ||
-            /\\\([^)]+\\\)/.test(rawText) ||
-            maybeMath.startsWith('\\(');
-
-          if (isMath) {
-            txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
-          } else {
-            txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
-          }
-
-          btn.replaceChildren(keySpan, txtSpan);
-        }
-
-        btn.onclick = () => submitAnswer(key);
-        choicesDiv.appendChild(btn);
-      }
-
-      if (token !== renderToken) return;
-      await typeset(choicesDiv);
-      if (token !== renderToken) return;
-
-      $('#feedback').textContent = '';
-      $('#status').textContent   = '';
-    }catch(e){
-      console.error(e);
-      if (token !== renderToken) return;
-      $('#status').textContent = `Failed to load question: ${e.message}`;
-      $('#stem').innerHTML = '';
+    if (!qRes.count || !qRes.questions?.length) {
+      $('#stem').innerHTML = 'No questions found.';
       $('#choices').innerHTML = '';
       $('#feedback').textContent = '';
+      await typeset();
+      return;
     }
+
+    currentQ = qRes.questions[0];
+    qTotal   = qRes.count || qTotal;
+    qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
+
+    // ---- STEM (heavy block → PDF) -----------------------------------------
+    const rawStem  = currentQ.stem_md || '';
+    const body     = stripDocBody(rawStem);
+    const parts    = extractFirstHeavyBlock(body);
+
+    if(parts){
+      const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
+      const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
+      const pdfUrl     = await fetchPdfBlobUrl(parts.block);
+      if (token !== renderToken) return;
+      $('#stem').innerHTML =
+        `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
+    }else{
+      if (token !== renderToken) return;
+      $('#stem').innerHTML = proseToHTML(normalizeTex(body));
+    }
+
+    // ---- MathJax AFTER stem is in the DOM (Safari timing-safe) ------------
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (window.MathJax?.typesetClear) MathJax.typesetClear();
+    await typeset($('#stem'));
+    if (token !== renderToken) return;
+
+    // ---- CHOICES (fixed A–E order) ---------------------------------------
+    const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
+    const choices = currentQ.choices || {};
+
+    const preferred = ['A','B','C','D','E'];
+    let entries = preferred.filter(k => Object.prototype.hasOwnProperty.call(choices, k))
+                           .map(k => [k, choices[k]]);
+    if (entries.length === 0) {
+      entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
+    }
+
+    if (token !== renderToken) return;
+    for (const [key,label] of entries){
+      const cbody  = stripDocBody(label || '');
+      const cparts = extractFirstHeavyBlock(cbody);
+
+      const btn = document.createElement('button');
+      btn.className = 'choice-btn';
+
+      if(cparts){
+        const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
+        const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
+        const url    = await fetchPdfBlobUrl(cparts.block);
+        if (token !== renderToken) return;
+        btn.innerHTML =
+          `<span class="choice-key">${key})</span>${before}` +
+          `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
+          `${after}`;
+      } else {
+        const rawText   = normalizeTex(cbody);
+        const maybeMath = wrapInlineMathIfNeeded(rawText);
+
+        const keySpan  = document.createElement('span');
+        keySpan.className = 'choice-key';
+        keySpan.textContent = `${key}) `;
+
+        const txtSpan  = document.createElement('span');
+        txtSpan.className = 'choice-text';
+
+        const isMath =
+          /\$[^$]+\$/.test(rawText) ||
+          /\\\([^)]+\\\)/.test(rawText) ||
+          (maybeMath && maybeMath.startsWith('\\('));
+
+        if (isMath) {
+          txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
+        } else {
+          txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
+        }
+
+        btn.replaceChildren(keySpan, txtSpan);
+      }
+
+      btn.onclick = () => submitAnswer(key);
+      choicesDiv.appendChild(btn);
+    }
+
+    if (token !== renderToken) return;
+    await typeset(choicesDiv);
+    if (token !== renderToken) return;
+
+    $('#feedback').textContent = '';
+    $('#status').textContent   = '';
+  }catch(e){
+    console.error(e);
+    if (token !== renderToken) return;
+    $('#status').textContent = `Failed to load question: ${e.message}`;
+    $('#stem').innerHTML = '';
+    $('#choices').innerHTML = '';
+    $('#feedback').textContent = '';
   }
+}
+
+  
 
   async function submitAnswer(choiceKey){
     if(!attemptId || !currentQ) return;
