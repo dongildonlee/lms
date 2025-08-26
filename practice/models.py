@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils.text import slugify
 
 # --- LaTeX asset fields ---
 content_hash      = models.CharField(max_length=64, blank=True, default="")
@@ -29,8 +30,15 @@ class Enrollment(models.Model):
 
 
 class Tag(models.Model):
-    name = models.CharField(max_length=120, unique=True)
-    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
+    name   = models.CharField(max_length=120, unique=True)
+    slug   = models.SlugField(max_length=120, unique=True, db_index=True, blank=True, null=True)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
+
+    def save(self, *args, **kwargs):
+        # Auto-fill slug from name if missing
+        if not self.slug and self.name:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
