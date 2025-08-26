@@ -100,6 +100,145 @@ throat \emph{and} tests positive? \answer{B}
   \item $\dfrac{435}{460}$
 \end{enumerate}
 
+% 5 --------------------------------------------------------------------------
+\item In a 1974 ``Dear Abby'' letter, a woman lamented that she had just given
+birth to her eighth child and all were girls. Her doctor had assured her that
+the chance of the eighth child being a girl was less than $1$ in $100$.
+What is the real probability that the eighth child would be a girl?
+\begin{enumerate}
+  \item $0.0039$
+  \item $0.5$
+  \item $(0.5)^{7}$
+  \item $(0.5)^{8}$
+  \item $\dfrac{(0.5)^{7}+(0.5)^{8}}{2}$
+\end{enumerate}
+
+% 6 --------------------------------------------------------------------------
+\item Hospital A has about 20 births per day, and Hospital B has about 40 births
+per day. About 50\% of all babies are boys, but the percentage who are boys
+varies at each hospital from day to day. Over the course of a year, which
+hospital will have more days on which 60\% or more of the births are boys?
+\begin{enumerate}
+  \item Hospital A
+  \item Hospital B
+  \item The difference will be negligible.
+  \item By the law of small numbers, this cannot be predicted.
+  \item By the law of large numbers, this cannot be predicted.
+\end{enumerate}
+
+% 7 --------------------------------------------------------------------------
+\item The probability that a college's mathematics department will fill an opening
+with a female professor is $0.55$, while the probability that the physics
+department will fill an opening with a female professor is $0.3$.
+Assuming independence, what is the probability that \emph{exactly one}
+of these two departments will fill their position with a female professor?
+\begin{enumerate}
+  \item $(0.55)(0.3)$
+  \item $0.55+0.3-(0.55)(0.3)$
+  \item $0.55-(0.55)(0.3)$
+  \item $(0.55)(0.70)+(0.30)(0.45)$
+  \item $(0.55)(0.70)+(0.30)(0.45)-(0.55)(0.30)$
+\end{enumerate}
+
+% 8 --------------------------------------------------------------------------
+\item Suppose that 2\% of a clinic's patients are known to have cancer.
+A blood test is positive in 98\% of patients with cancer but is also positive
+in 3\% of patients who do not have cancer.
+If a randomly chosen patient tests positive, what is the probability
+that the person actually has cancer?
+\begin{enumerate}
+  \item $0.02$
+  \item $0.02+0.03$
+  \item $(0.02)(0.98)$
+  \item $(0.02)(0.98)+(0.98)(0.03)$
+  \item $\displaystyle
+          \frac{0.02\cdot0.98}{\,0.02\cdot0.98+0.98\cdot0.03\,}$
+\end{enumerate}
+
+% 9 --------------------------------------------------------------------------
+\item A teacher has 90 students. Of those, 21 have at least two analog clocks
+in their homes, and 62 have at least three television sets in their homes.
+There are 15 students who do not have at least two analog clocks and do not have
+at least three television sets. Let $C$ be the event “at least two analog clocks”
+and $T$ the event “at least three television sets”.
+Are $C$ and $T$ mutually exclusive events?
+\begin{enumerate}
+  \item No, because $P(C\cap T)=\dfrac{8}{90}$.
+  \item No, because $P(C\cap T)=\dfrac{75}{90}$.
+  \item No, because $P(C\cap T)=\dfrac{83}{90}$.
+  \item Yes, because $P(C\cap T)=\dfrac{8}{90}$.
+  \item Yes, because $P(C\cap T)=\dfrac{83}{90}$.
+\end{enumerate}
+
+% 10 -------------------------------------------------------------------------
+\item A random sample of adults aged 25 and up were surveyed as to whether or not
+they had tattoos and whether or not they had ever taken a college course.
+The mosaic plot below displays the data.
+
+\begin{center}
+\begin{tikzpicture}[x=0.08cm,y=0.08cm,baseline]
+  % total frame (width 140, height 80 for easy ratios)
+  \draw (0,0) rectangle (140,80);
+  % column split (adjust 65/75 if you want different column totals)
+  \draw (65,0) -- (65,80);
+  % row splits within each column (adjust 48 and 30 to change row proportions)
+  \draw (0,48) -- (65,48);     % left column horizontal split
+  \draw (65,30) -- (140,30);   % right column horizontal split
+
+  % subtle shading to differentiate blocks (tune to taste)
+  \fill[gray!25] (0,48) rectangle (65,80);    % No tattoos (left–top)
+  \fill[gray!12] (65,0) rectangle (140,30);   % Tattoos (right–bottom)
+
+  % labels inside/under
+  \node at (32.5,64) {\small No tattoos};
+  \node at (102.5,15) {\small Tattoos};
+
+  \node[below] at (32.5,0) {\small No college};
+  \node[below] at (102.5,0) {\small At least some college};
+\end{tikzpicture}
+\end{center}
+
+Which is greater, the probability that someone in this sample has taken a college
+course \emph{given} that they have a tattoo, or the probability that someone has
+a tattoo \emph{given} that they have taken a college course?
+\begin{enumerate}
+  \item The probability of college $\mid$ tattoo is greater.
+  \item The probability of tattoo $\mid$ college is greater.
+  \item The two probabilities are equal.
+  \item This cannot be answered without knowing $P(\text{college and tattoo})$.
+  \item This cannot be answered without knowing
+        (1) $P(\text{college})$, (2) $P(\text{tattoo})$, and
+        (3) $P(\text{college and tattoo})$.
+\end{enumerate}
+
+% 11 -------------------------------------------------------------------------
+\item For which of the following probability assignments are events $E$ and $F$
+independent? (Each row lists $P(E\cap F^{c})$, $P(E\cap F)$, $P(E^{c}\cap F)$;
+the remaining cell is $P(E^{c}\cap F^{c})=1$ minus the sum of those three.)
+\begin{enumerate}
+  \item $0.2,\;0.2,\;0.2$
+  \item $0.3,\;0.0,\;0.3$
+  \item $0.3,\;0.2,\;0.1$
+  \item $0.4,\;0.1,\;0.1$
+  \item $0.2,\;0.4,\;0.2$
+\end{enumerate}
+
+% 12 -------------------------------------------------------------------------
+\item Let
+\begin{itemize}
+  \item[I.] A randomly selected high school senior eats breakfast.
+  \item[II.] A randomly selected \emph{teenager} is a high school senior who eats breakfast.
+  \item[III.] A randomly selected teenager who eats breakfast is a high school senior.
+\end{itemize}
+Which order best compares these probabilities?
+\begin{enumerate}
+  \item $P(\text{I})<P(\text{II})<P(\text{III})$
+  \item $P(\text{I})>P(\text{II})>P(\text{III})$
+  \item $P(\text{I})<P(\text{III})<P(\text{II})$
+  \item $P(\text{I})>P(\text{III})>P(\text{II})$
+  \item $P(\text{II})<P(\text{I})<P(\text{III})$
+\end{enumerate}
+
 \end{enumerate}
 
 \end{document}
