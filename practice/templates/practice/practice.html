@@ -9,8 +9,9 @@
 <style>
   /* Make MathJax inline unless display */
   #qCard mjx-container { line-height: 1.6; }
-  #qCard mjx-container[display="true"] { display:block; margin:.5rem 0; }
-  #qCard mjx-container:not([display="true"]) { display:inline; }
+  #qCard mjx-container[display="true"] { display:block !important; margin:.5rem 0 !important; }
+  #qCard mjx-container:not([display="true"]) { display:inline !important; margin:0 !important; }
+  #qCard mjx-container { vertical-align: baseline; }
 
   /* Dark text in the white card */
   #qCard, #qCard * { color:#0f172a; }
@@ -125,6 +126,32 @@
       .replace(/\[\[OL_OPEN\]\]/g,  '<ol class="list-decimal ml-6">')
       .replace(/\[\[OL_CLOSE\]\]/g, '</ol>')
       .replace(/\[\[LI\]\]/g,       '<li>');
+  }
+
+  // Collapse cases where inline math sits on its own line:
+  //   "\n $C$ \n"  → " $C$ "
+  //   "\n \(C\) \n" → " \(C\) "
+  function squishSoloInlineMath(s){
+    if(!s) return s;
+    // $...$
+    s = s.replace(/\n\s*\$([^\$\n]{1,64})\$\s*\n/g, ' $$1$ ');
+    // \(...\)
+    s = s.replace(/\n\s*\\\(([^\)\n]{1,64})\\\)\s*\n/g, ' \\($1\\) ');
+    return s;
+  }
+
+  function proseToHTML(s){
+    s = squishSoloInlineMath(s);   // <-- add this line
+    // (the rest unchanged)
+    s = maskLatexLists(s);
+    let h = escapeHTML(s || '');
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+         .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+         .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
+         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
+         .replace(/\n{2,}/g, '<br><br>')
+         .replace(/\n/g, ' ');
+    return unmaskLists(h).trim();
   }
 
   function proseToHTML(s){
