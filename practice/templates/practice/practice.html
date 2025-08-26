@@ -69,7 +69,7 @@
   let currentQ  = null;
   let qOffset   = 0;   // which question to fetch next
   let qTotal    = 0;   // total questions for the current tag
-  let renderToken = 0; // <-- NEW: cancels stale async writes
+  let renderToken = 0; // cancels stale async writes
 
   // --- CSRF ---
   function getCookie(name) {
@@ -108,7 +108,27 @@
   }
 
   function escapeHTML(x){ return (x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // NEW: make LaTeX lists render as HTML lists
+  function maskLatexLists(s){
+    return (s||'')
+      .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
+      .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
+      .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
+      .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]')
+      .replace(/^\s*\\item\s+/gm,       '[[LI]]');
+  }
+  function unmaskLists(h){
+    return (h||'')
+      .replace(/\[\[UL_OPEN\]\]/g,  '<ul class="list-disc ml-6">')
+      .replace(/\[\[UL_CLOSE\]\]/g, '</ul>')
+      .replace(/\[\[OL_OPEN\]\]/g,  '<ol class="list-decimal ml-6">')
+      .replace(/\[\[OL_CLOSE\]\]/g, '</ol>')
+      .replace(/\[\[LI\]\]/g,       '<li>');
+  }
+
   function proseToHTML(s){
+    s = maskLatexLists(s);
     let h = escapeHTML(s || '');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
          .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
@@ -116,7 +136,7 @@
          .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
          .replace(/\n{2,}/g, '<br><br>')
          .replace(/\n/g, ' ');
-    return h.trim();
+    return unmaskLists(h).trim();
   }
 
   function normalizeTex(s){
@@ -196,8 +216,8 @@
   }
 
   async function loadQuestion(){
-    const token = ++renderToken;            // NEW: token for this render
-    $('#stem').innerHTML = '';              // NEW: clear old content immediately
+    const token = ++renderToken;            // token for this render
+    $('#stem').innerHTML = '';              // clear old content immediately
     $('#choices').innerHTML = '';
     $('#feedback').textContent = '';
 
@@ -209,7 +229,7 @@
       const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
                   (tag ? `&tag=${encodeURIComponent(tag)}` : '');
       const qRes = await api(url);
-      if (token !== renderToken) return;    // NEW: bail if stale
+      if (token !== renderToken) return;
 
       if (!qRes.count || !qRes.questions?.length) {
         $('#stem').innerHTML = 'No questions found.';
@@ -232,16 +252,16 @@
         const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
         const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
         const pdfUrl     = await fetchPdfBlobUrl(parts.block);
-        if (token !== renderToken) return;  // NEW: bail if stale
+        if (token !== renderToken) return;
         $('#stem').innerHTML =
           `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
       }else{
-        if (token !== renderToken) return;  // NEW
+        if (token !== renderToken) return;
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
-      if (token !== renderToken) return;    // NEW
+      if (token !== renderToken) return;
       await typeset($('#stem'));
-      if (token !== renderToken) return;    // NEW
+      if (token !== renderToken) return;
 
       // ---- CHOICES (fixed A–E order) ---------------------------------------
       const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
@@ -254,7 +274,7 @@
         entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
       }
 
-      if (token !== renderToken) return;    // NEW
+      if (token !== renderToken) return;
       for (const [key,label] of entries){
         const cbody  = stripDocBody(label || '');
         const cparts = extractFirstHeavyBlock(cbody);
@@ -266,7 +286,7 @@
           const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
           const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
-          if (token !== renderToken) return; // NEW
+          if (token !== renderToken) return;
           btn.innerHTML =
             `<span class="choice-key">${key})</span>${before}` +
             `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
@@ -288,9 +308,9 @@
             maybeMath.startsWith('\\(');
 
           if (isMath) {
-            txtSpan.textContent = maybeMath;
+            txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
           } else {
-            txtSpan.innerHTML   = proseToHTML(rawText);
+            txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
           }
 
           btn.replaceChildren(keySpan, txtSpan);
@@ -300,15 +320,15 @@
         choicesDiv.appendChild(btn);
       }
 
-      if (token !== renderToken) return;    // NEW
+      if (token !== renderToken) return;
       await typeset(choicesDiv);
-      if (token !== renderToken) return;    // NEW
+      if (token !== renderToken) return;
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
     }catch(e){
       console.error(e);
-      if (token !== renderToken) return;    // NEW
+      if (token !== renderToken) return;
       $('#status').textContent = `Failed to load question: ${e.message}`;
       $('#stem').innerHTML = '';
       $('#choices').innerHTML = '';
@@ -345,6 +365,7 @@
 </script>
 <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
