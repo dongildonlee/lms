@@ -5,6 +5,8 @@ from django.core.management.base import BaseCommand, CommandError
 from practice.models import Question, Tag
 from django.contrib.auth.models import User
 
+# ----------------------- existing helpers you had -----------------------
+
 HEADER_RE = re.compile(r"^%%\s*(\w+)\s*:\s*(.+)$")
 ENUM_TOKEN_RE = re.compile(r"(\\begin\{enumerate\})|(\\end\{enumerate\})|(\\item\b)", re.M)
 
@@ -25,8 +27,8 @@ def _strip_comments_and_textmode_macros(s: str) -> str:
     # strip common text-mode spacing/formatting macros that don't display in the web
     s = re.sub(r"\\noindent\b", "", s)
     s = re.sub(r"\\(big|med|small)skip\b", "", s)
-    # leave \textbf inside math; outside math it will show literally, so soften it:
-    s = re.sub(r"\\textbf\{([^}]*)\}", r"**\1**", s)  # simple and good enough here
+    # soften \textbf to markdown-ish bold
+    s = re.sub(r"\\textbf\{([^}]*)\}", r"**\1**", s)
     return _trim(s)
 
 def _parse_nested_choices(block_text: str):
@@ -35,7 +37,7 @@ def _parse_nested_choices(block_text: str):
     Ignore anything before the first \item (e.g. [label=(\Alph*)]).
     """
     parts = re.split(r"(?m)^\s*\\item\b", block_text)
-    parts = parts[1:]  # <-- DROP anything before the first \item
+    parts = parts[1:]  # drop anything before the first \item
     parts = [p for p in parts if p.strip()]
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     out = {}
@@ -43,8 +45,6 @@ def _parse_nested_choices(block_text: str):
         lab = letters[i] if i < len(letters) else str(i+1)
         out[lab] = _trim(p)
     return out
-
-
 
 def _split_top_level_items(body: str):
     """
@@ -89,11 +89,13 @@ def _split_top_level_items(body: str):
 
     return preamble, [_trim(x) for x in items if x.strip()]
 
-
-
-
-
 def _extract_item_stem_and_choices(item_text: str):
+    """
+    For one top-level \item block:
+      - remove \answer{X} (capture X)
+      - take first nested enumerate as choices
+      - return (stem_without_that_enumerate, choices, answer_key)
+    """
     m = re.search(r"\\begin\{enumerate\}", item_text)
     if not m:
         stem, ans = _strip_answer_marker(item_text)
@@ -125,6 +127,57 @@ def _extract_item_stem_and_choices(item_text: str):
     stem = _strip_comments_and_textmode_macros(stem_raw)
     return stem, choices, ans
 
+# ----------------------- NEW: asset & uses support -----------------------
+
+ASSET_BLOCK_RE = re.compile(
+    r"(?is)"                       # i: case-insensitive, s: dot matches newlines
+    r"\\begin\{asset\}\{([^}]+)\}\s*"  # \begin{asset}{key}
+    r"(.*?)"                            # content (non-greedy)
+    r"\\end\{asset\}\s*"                # \end{asset}
+)
+
+USES_RE = re.compile(r"\\uses\{([^}]+)\}", re.I)
+
+def _extract_assets_from_text(s: str):
+    """
+    Find and remove all \begin{asset}{key}...\end{asset} blocks in 's'.
+    Return (text_without_assets, assets_dict).
+    """
+    assets = {}
+
+    def repl(m):
+        key = m.group(1).strip()
+        content = _trim(m.group(2))
+        assets[key] = content
+        return ""  # strip from text
+
+    cleaned = ASSET_BLOCK_RE.sub(repl, s or "")
+    return _trim(cleaned), assets
+
+def _remove_uses_and_collect_keys(s: str):
+    """
+    Remove all \uses{key} markers from 's' and return (cleaned_text, [keys]).
+    """
+    keys = USES_RE.findall(s or "")
+    cleaned = USES_RE.sub("", s or "")
+    return _trim(cleaned), [k.strip() for k in keys if k.strip()]
+
+def _prepend_assets(stem: str, assets: dict, keys: list[str]) -> str:
+    """
+    Prepend the selected asset blocks (dedup, preserve first-seen order) to the stem.
+    """
+    seen = set()
+    blocks = []
+    for k in keys:
+        if k not in seen and k in assets:
+            blocks.append(assets[k])
+            seen.add(k)
+    if blocks:
+        return _trim("\n\n".join(blocks + [stem]))
+    return stem
+
+# ----------------------- File → Question dicts -----------------------
+
 def parse_tex_file_to_questions(path: Path):
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -141,30 +194,47 @@ def parse_tex_file_to_questions(path: Path):
 
     body = "\n".join(lines[body_start:]).strip()
 
+    # Split into preamble + items (preamble = everything before the first top-level enumerate)
     preamble, items = _split_top_level_items(body)
+
+    # NEW: extract shared assets from the preamble only (do NOT dump whole preamble into each item)
+    preamble_wo_assets, assets = _extract_assets_from_text(preamble)
+
+    # Tags and type from headers (unchanged)
     tags = [t.strip() for t in (meta.get("tags", "").strip().strip("[]")).split(",") if t.strip()]
     qtype = (meta.get("type") or "mcq").lower()
 
     if items:
         out = []
         for it in items:
+            # Pull stem/choices/answer from the item
             stem, choices, ans_inline = _extract_item_stem_and_choices(it)
 
-            # *** THIS IS THE KEY LINE ***
-            full_stem = _trim((preamble or "") + "\n\n" + stem) if preamble.strip() else _trim(stem)
+            # NEW: strip \uses{key} markers from the item stem and collect requested assets
+            stem_no_uses, use_keys = _remove_uses_and_collect_keys(stem)
+
+            # NEW: only prepend assets actually referenced by this item
+            full_stem = _prepend_assets(stem_no_uses, assets, use_keys)
+
+            # If you still want to include *non-asset* bits of preamble for every item, append them here:
+            # (most folks leave this out to avoid accidental leaks)
+            # if preamble_wo_assets:
+            #     full_stem = _trim(preamble_wo_assets + "\n\n" + full_stem)
 
             correct = (ans_inline or meta.get("answer") or "A").strip().upper()[:1]
             out.append({
                 "type": qtype,
                 "tags": tags,
                 "answer": correct,
-                "stem_tex": full_stem,      # store with table included
+                "stem_tex": full_stem,      # store with ONLY relevant assets included
                 "choices": choices or None,
             })
         return out
 
-    # Single-question fallback
-    stem = _strip_comments_and_textmode_macros(body)
+    # Single-question fallback (no enumerate at top level)
+    # We still respect asset markers in the whole body
+    body_wo_assets, assets = _extract_assets_from_text(body)
+    stem = _strip_comments_and_textmode_macros(body_wo_assets)
     return [{
         "type": qtype,
         "tags": tags,
@@ -173,11 +243,10 @@ def parse_tex_file_to_questions(path: Path):
         "choices": None
     }]
 
-
-
+# ----------------------- Management command -----------------------
 
 class Command(BaseCommand):
-    help = "Import LaTeX questions from a folder"
+    help = "Import LaTeX questions from a folder (supports shared assets via \\begin{asset}{key}... and per-item \\uses{key})."
 
     def add_arguments(self, parser):
         parser.add_argument("root", type=str, help="Folder containing .tex files")
@@ -205,7 +274,7 @@ class Command(BaseCommand):
             for data in parse_tex_file_to_questions(f):
                 q = Question.objects.create(
                     type=data["type"],
-                    stem_md=data["stem_tex"],
+                    stem_md=data["stem_tex"],      # your model stores TeX in 'stem_md'
                     choices=data["choices"] or {},
                     correct={"choice": data["answer"]},
                     created_by=created_by,
@@ -217,3 +286,4 @@ class Command(BaseCommand):
                 self.stdout.write(f"Imported Q{q.id} from {f.relative_to(root)}")
 
         self.stdout.write(self.style.SUCCESS(f"Done. Imported {total} question(s)."))
+

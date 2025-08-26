@@ -5,9 +5,16 @@
 \usepackage{tikz}
 \usepackage[margin=1in]{geometry}
 
+% --- importer markers (no-ops for LaTeX; used by your importer) ---
+\newenvironment{asset}[1]{}{}   % wraps a shared figure/table; #1 = asset key
+\newcommand{\uses}[1]{}         % mark items that consume that asset
+
 \begin{document}
 
-%========= Preamble (this is prepended to each question by the importer) =========
+%========= Shared assets (parsed by importer) ===================================
+
+% Strep/Healthy 2x2 table used by S1–S4
+\begin{asset}{strep-2x2}
 \begin{center}
 \begin{tikzpicture}[x=1cm,y=1cm]
   % Column titles
@@ -38,14 +45,46 @@
   \node at (4.5,-0.8) {460};
 \end{tikzpicture}
 \end{center}
+\end{asset}
 
 \bigskip
+%===============================================================================
+
+% (Example) Mosaic plot as a separate asset (attach via \uses{mosaic-tattoos-college} in the relevant item)
+A random sample of adults aged 25 and up were surveyed as to whether or not
+they had tattoos and whether or not they had ever taken a college course.
+The mosaic plot below displays the data.
+
+\begin{asset}{mosaic-tattoos-college}
+\begin{center}
+\begin{tikzpicture}[x=0.08cm,y=0.08cm,baseline]
+  \draw (0,0) rectangle (140,80);
+  \draw (65,0) -- (65,80);
+  \draw (0,48) -- (65,48);     % left column horizontal split
+  \draw (65,30) -- (140,30);   % right column horizontal split
+
+  \fill[gray!25] (0,48) rectangle (65,80);    % No tattoos (left–top)
+  \fill[gray!12] (65,0) rectangle (140,30);   % Tattoos (right–bottom)
+
+  \node at (32.5,64) {\small No tattoos};
+  \node at (102.5,15) {\small Tattoos};
+
+  \node[below] at (32.5,0) {\small No college};
+  \node[below] at (102.5,0) {\small At least some college};
+\end{tikzpicture}
+\end{center}
+\end{asset}
+
+Which is greater, the probability that someone in this sample has taken a college
+course \emph{given} that they have a tattoo, or the probability that someone has
+a tattoo \emph{given} that they have taken a college course?
+
 %===============================================================================
 
 \begin{enumerate}[label=\textbf{S\arabic*.}]
 
 % --- S1 ------------------------------------------------------------------------
-\item \textbf{Predictive value.} What is the probability that a person has strep
+\item \uses{strep-2x2} \textbf{Predictive value.} What is the probability that a person has strep
 throat \emph{and} tests positive? \answer{B}
 
 \textit{Use the same table above.}
@@ -59,7 +98,7 @@ throat \emph{and} tests positive? \answer{B}
 \end{enumerate}
 
 % --- S2 ------------------------------------------------------------------------
-\item \textbf{False-positive rate.} What is the probability of testing positive
+\item \uses{strep-2x2} \textbf{False-positive rate.} What is the probability of testing positive
 \emph{given} that the person does \emph{not} have strep throat? \answer{A}
 
 \textit{Use the same table above.}
@@ -73,7 +112,7 @@ throat \emph{and} tests positive? \answer{B}
 \end{enumerate}
 
 % --- S3 ------------------------------------------------------------------------
-\item \textbf{Sensitivity.} What is the probability of testing positive
+\item \uses{strep-2x2} \textbf{Sensitivity.} What is the probability of testing positive
 \emph{given} that the person \emph{has} strep throat? \answer{D}
 
 \textit{Use the same table above.}
@@ -87,7 +126,7 @@ throat \emph{and} tests positive? \answer{B}
 \end{enumerate}
 
 % --- S4 ------------------------------------------------------------------------
-\item \textbf{Specificity.} What is the probability of testing negative
+\item \uses{strep-2x2} \textbf{Specificity.} What is the probability of testing negative
 \emph{given} that the person does \emph{not} have strep throat? \answer{E}
 
 \textit{Use the same table above.}
@@ -100,7 +139,7 @@ throat \emph{and} tests positive? \answer{B}
   \item $\dfrac{435}{460}$
 \end{enumerate}
 
-% 5 --------------------------------------------------------------------------
+% --- 5 (no shared asset) -------------------------------------------------------
 \item In a 1974 ``Dear Abby'' letter, a woman lamented that she had just given
 birth to her eighth child and all were girls. Her doctor had assured her that
 the chance of the eighth child being a girl was less than $1$ in $100$.
