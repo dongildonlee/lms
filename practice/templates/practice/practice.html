@@ -6,7 +6,6 @@
   Practice <span id="subjectLabel" class="text-gray-300 text-lg"></span>
 </h1>
 
-
 <style>
   /* Make MathJax inline unless display */
   #qCard mjx-container { line-height: 1.6; }
@@ -68,9 +67,9 @@
   const $ = (sel) => document.querySelector(sel);
   let attemptId = null;
   let currentQ  = null;
-  let qOffset = 0;   // which question to fetch next
-  let qTotal  = 0;   // total questions for the current tag
-
+  let qOffset   = 0;   // which question to fetch next
+  let qTotal    = 0;   // total questions for the current tag
+  let renderToken = 0; // <-- NEW: cancels stale async writes
 
   // --- CSRF ---
   function getCookie(name) {
@@ -197,6 +196,11 @@
   }
 
   async function loadQuestion(){
+    const token = ++renderToken;            // NEW: token for this render
+    $('#stem').innerHTML = '';              // NEW: clear old content immediately
+    $('#choices').innerHTML = '';
+    $('#feedback').textContent = '';
+
     $('#qCard')?.classList.remove('hidden');
     $('#qCard').style.display='block';
 
@@ -205,6 +209,7 @@
       const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
                   (tag ? `&tag=${encodeURIComponent(tag)}` : '');
       const qRes = await api(url);
+      if (token !== renderToken) return;    // NEW: bail if stale
 
       if (!qRes.count || !qRes.questions?.length) {
         $('#stem').innerHTML = 'No questions found.';
@@ -218,7 +223,6 @@
       qTotal   = qRes.count || qTotal;
       qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
 
-
       // ---- STEM (heavy block → PDF) -----------------------------------------
       const rawStem  = currentQ.stem_md || '';
       const body     = stripDocBody(rawStem);
@@ -228,12 +232,16 @@
         const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
         const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
         const pdfUrl     = await fetchPdfBlobUrl(parts.block);
+        if (token !== renderToken) return;  // NEW: bail if stale
         $('#stem').innerHTML =
           `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
       }else{
+        if (token !== renderToken) return;  // NEW
         $('#stem').innerHTML = proseToHTML(normalizeTex(body));
       }
+      if (token !== renderToken) return;    // NEW
       await typeset($('#stem'));
+      if (token !== renderToken) return;    // NEW
 
       // ---- CHOICES (fixed A–E order) ---------------------------------------
       const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
@@ -243,10 +251,10 @@
       let entries = preferred.filter(k => Object.prototype.hasOwnProperty.call(choices, k))
                              .map(k => [k, choices[k]]);
       if (entries.length === 0) {
-        // fallback: sort whatever keys exist so it’s stable
         entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
       }
 
+      if (token !== renderToken) return;    // NEW
       for (const [key,label] of entries){
         const cbody  = stripDocBody(label || '');
         const cparts = extractFirstHeavyBlock(cbody);
@@ -258,6 +266,7 @@
           const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
           const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
           const url    = await fetchPdfBlobUrl(cparts.block);
+          if (token !== renderToken) return; // NEW
           btn.innerHTML =
             `<span class="choice-key">${key})</span>${before}` +
             `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
@@ -273,16 +282,15 @@
           const txtSpan  = document.createElement('span');
           txtSpan.className = 'choice-text';
 
-          // If it looks like math (already wrapped or we wrapped), use textContent so MJ sees the TeX.
           const isMath =
             /\$[^$]+\$/.test(rawText) ||
             /\\\([^)]+\\\)/.test(rawText) ||
             maybeMath.startsWith('\\(');
 
           if (isMath) {
-            txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
+            txtSpan.textContent = maybeMath;
           } else {
-            txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
+            txtSpan.innerHTML   = proseToHTML(rawText);
           }
 
           btn.replaceChildren(keySpan, txtSpan);
@@ -292,13 +300,15 @@
         choicesDiv.appendChild(btn);
       }
 
-      // Typeset all choices once (deterministic)
+      if (token !== renderToken) return;    // NEW
       await typeset(choicesDiv);
+      if (token !== renderToken) return;    // NEW
 
       $('#feedback').textContent = '';
       $('#status').textContent   = '';
     }catch(e){
       console.error(e);
+      if (token !== renderToken) return;    // NEW
       $('#status').textContent = `Failed to load question: ${e.message}`;
       $('#stem').innerHTML = '';
       $('#choices').innerHTML = '';
@@ -335,6 +345,7 @@
 </script>
 <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 
