@@ -162,11 +162,11 @@
     s = maskLatexLists(s);
     let h = escapeHTML(s || '');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-         .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
-         .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
-         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
-         .replace(/\n{2,}/g, '<br><br>')
-         .replace(/\n/g, ' ');
+     .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+     .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
+     .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
+     .replace(/\s*\n+\s*/g, ' ');
+
     return unmaskLists(h).trim();
   }
 
