@@ -274,8 +274,8 @@
 
   try{
     const tag = new URLSearchParams(location.search).get('tag') || '';
-    const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=id` +
-                (tag ? `&tag=${encodeURIComponent(tag)}` : '');
+    const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=-id&_t=${Date.now()}`
+           + (tag ? `&tag=${encodeURIComponent(tag)}` : '');
     const qRes = await api(url);
     if (token !== renderToken) return;
 
