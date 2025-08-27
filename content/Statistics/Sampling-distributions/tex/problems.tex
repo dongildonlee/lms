@@ -1,0 +1,133 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=1in]{geometry}
+
+% --- importer markers (no-ops; your importer looks for them) ---
+\newenvironment{asset}[1]{}{}
+\newcommand{\uses}[1]{}
+
+\begin{document}
+
+\begin{enumerate}
+
+% 1
+\item Which of the following is a true statement? \answer{A}
+\begin{enumerate}
+  \item The area under a normal curve is always equal to 1, no matter what the mean and standard deviation are.
+  \item All bell-shaped curves are normal distributions for some choice of $\mu$ and $\sigma$.
+  \item The smaller the standard deviation of a normal curve, the lower and more spread out the graph.
+  \item Depending upon the value of the standard deviation, normal curves with different means may be centered around the same number.
+  \item Depending upon the value of the standard deviation, the mean and median of a particular normal distribution may be different.
+\end{enumerate}
+
+% 2
+\item The continuous random variable $X$ has a normal distribution with mean $20$ and standard deviation $4$. For which of the following is the probability equal to $0$? \answer{A}
+\begin{enumerate}
+  \item $P(X=22)$
+  \item $P(X<22)$
+  \item $P(X>22)$
+  \item $P(21<X<22)$
+  \item $P(X<21)\text{ or }P(X>22)$
+\end{enumerate}
+
+% 3
+\item Populations $P_1$ and $P_2$ are normally distributed and have identical means. However, the standard deviation of $P_1$ is twice the standard deviation of $P_2$. What can be said about the percentage of observations falling within two standard deviations of the mean for each population? \answer{E}
+\begin{enumerate}
+  \item The percentage for $P_1$ is twice the percentage for $P_2$.
+  \item The percentage for $P_1$ is greater than but not twice as great as the percentage for $P_2$.
+  \item The percentage for $P_2$ is twice the percentage for $P_1$.
+  \item The percentage for $P_2$ is greater than but not twice as great as the percentage for $P_1$.
+  \item The percentages are identical.
+\end{enumerate}
+
+% 4
+\item A trucking firm determines that its fleet of trucks averages a mean of $12.4$ miles per gallon with a standard deviation of $1.2$ miles per gallon on cross-country hauls. What is the probability that one of the trucks averages fewer than $10$ miles per gallon? \answer{B}
+\begin{enumerate}
+  \item $P\!\left(z<-2.4\right)$
+  \item $P\!\left(z<-2\right)$
+  \item $P\!\left(z<10\right)$
+  \item $P\!\left(z<\dfrac{10}{1.2}\right)$
+  \item $P\!\left(z<\dfrac{12.4}{1.2}\right)$
+\end{enumerate}
+
+% 5
+\item An electronic product takes on average $3.4$ hours to move through an assembly line. If the standard deviation is $0.5$ hours, what is the probability that an item will take between $3$ and $4$ hours to move through the assembly line? \answer{E}
+\begin{enumerate}
+  \item $P(3<z<4)$
+  \item $P\!\left(\dfrac{3}{0.5}<z<\dfrac{4}{0.5}\right)$
+  \item $P(3-3.4<z<4-3.4)$
+  \item $P\!\left(\dfrac{3-3.4}{\,0.5\,}<z<\dfrac{4-3.4}{\,0.5\,}\right)$
+  \item $P\!\left(\dfrac{3-3.4}{0.5}<z<\dfrac{4-3.4}{0.5}\right)$
+\end{enumerate}
+
+% 6
+\item The mean noise level in a restaurant is $70$ decibels with a standard deviation of $4$ decibels. Ninety-nine percent of the time the noise level is below what value? \answer{E}
+\begin{enumerate}
+  \item $70+1.96(4)$
+  \item $70-2.576(4)$
+  \item $70+2.576(4)$
+  \item $70-2.326(4)$
+  \item $70+2.326(4)$
+\end{enumerate}
+
+% 7
+\item The mean income per household in a certain state is \$9{,}500 with a standard deviation of \$1{,}750. The middle $95\%$ of incomes are between what two values? \answer{B}
+\begin{enumerate}
+  \item $9{,}500 \pm 1.645(1{,}750)$
+  \item $9{,}500 \pm 1.96(1{,}750)$
+  \item $9{,}500 \pm 1.645\!\left(\dfrac{1{,}750}{2}\right)$
+  \item $9{,}500 \pm \dfrac{1{,}750}{1.645}$
+  \item $9{,}500 \pm \dfrac{1{,}750}{1.96}$
+\end{enumerate}
+
+% 8
+\item One company produces movie trailers whose mean length is $150$ seconds with a standard deviation of $40$ seconds, while a second company produces movie trailers whose mean length is $120$ seconds with a standard deviation of $30$ seconds. What is the probability that the combined length of two randomly selected trailers, one from each company, will be less than three minutes? \answer{D}
+\begin{enumerate}
+  \item $0.000$
+  \item $P\!\left(z<\dfrac{180-270}{50}\right)$
+  \item $P\!\left(z<\dfrac{180-270}{70}\right)$
+  \item $P\!\left(z<\dfrac{180-270}{\sqrt{40^2+30^2}}\right)$
+  \item $P\!\left(z<\dfrac{180-270}{\sqrt{\tfrac{40^2}{n}+\tfrac{30^2}{n}}}\right)$
+\end{enumerate}
+
+% 9
+\item Cucumbers grown on a certain farm have weights with a standard deviation of $2$ ounces. What is the mean weight if $85\%$ of the cucumbers weigh less than $16$ ounces? \answer{C}
+\begin{enumerate}
+  \item $16-0.518(2)$
+  \item $16-0.85(2)$
+  \item $16-1.036(2)$
+  \item $16+0.85(2)$
+  \item $16+1.036(2)$
+\end{enumerate}
+
+% 10
+\item The mean and standard deviation of the sample data collected on a continuous variable $x$ are $10$ and $5$, respectively. The following table shows the relative frequencies of the data in the given intervals. Based on the table, do the data support using a normal model to approximate population characteristics? \answer{D}
+
+\begin{center}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Interval} & \textbf{Relative frequency} \\
+\hline
+$-5 \le x < 0$   & $0.03$ \\
+$0 \le x < 5$    & $0.12$ \\
+$5 \le x < 10$   & $0.35$ \\
+$10 \le x < 15$  & $0.34$ \\
+$15 \le x < 20$  & $0.14$ \\
+$20 \le x < 25$  & $0.02$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{enumerate}
+  \item No, because some values are negative.
+  \item No, because the relative frequency distribution doesn’t follow the empirical rule.
+  \item Yes, because the sum of the relative frequencies is $1.00$.
+  \item Yes, because the relative frequency distribution roughly follows the empirical rule.
+  \item This cannot be answered without knowing the sample size.
+\end{enumerate}
+
+\end{enumerate}
+
+\end{document}
