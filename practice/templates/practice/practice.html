@@ -116,40 +116,36 @@
 
   // NEW: make LaTeX lists render as HTML lists
   function maskLatexLists(s){
-  return (s||'')
-    .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
-    .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
-    .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
-    .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]')
-    // \item or \item[<label>]  →  [[LI]] or [[LI:<label>]]
-    .replace(/(^|\n)\s*\\item(?:\s*\[([^\]]+)\])?\s*/g, (_, pre, lbl) => {
-      return `${pre}[[LI${lbl ? ':'+lbl : ''}]]`;
-    });
+  if (!s) return s;
+  // keep original newlines (don’t normalize yet)
+  s = s.replace(/\r\n?/g, '\n')
+       .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
+       .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
+       .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
+       .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]');
+
+  // \item with optional [label]; preserve the label (e.g. I., II., III.)
+  s = s.replace(/\\item(?:\s*\[([^\]]+)\])?\s*/g, (_m, label) =>
+    label ? `[[LI:${label}]]` : '[[LI]]'
+  );
+  return s;
 }
 
 function unmaskLists(h){
-  // list containers
-  h = (h||'')
-    .replace(/\[\[UL_OPEN\]\]/g, '<ul class="list-disc ml-6">')
-    .replace(/\[\[OL_OPEN\]\]/g, '<ol class="list-decimal ml-6">')
-    .replace(/\[\[UL_CLOSE\]\]/g, '[[/UL]]')
-    .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]');
+  if (!h) return h;
+  h = h.replace(/\[\[UL_OPEN\]\]/g, '<ul class="list-disc ml-6">')
+       .replace(/\[\[OL_OPEN\]\]/g, '<ol class="list-decimal ml-6">')
+       .replace(/\[\[UL_CLOSE\]\]/g, '[[/UL]]')
+       .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]')
+       .replace(/\[\[LI:([^\]]+)\]\]/g, '</li><li class="has-label"><span class="li-label">$1</span> ')
+       .replace(/\[\[LI\]\]/g, '</li><li>');
 
-  // items: if there’s a label, show it and suppress the bullet
-  h = h.replace(/\[\[LI(?::([^\]]+))?\]\]/g, (_, lbl) => {
-    return lbl
-      ? '</li><li class="has-label"><span class="li-label">' + lbl + '</span> '
-      : '</li><li>';
-  });
-
-  // normalize starts
-  h = h.replace(/<ul([^>]*)>\s*<\/li><li>/g, '<ul$1><li>');
-  h = h.replace(/<ol([^>]*)>\s*<\/li><li>/g, '<ol$1><li>');
+  // fix the first <li> after opening the list
+  h = h.replace(/<(ul|ol)([^>]*)>\s*<\/li><li>/g, '<$1$2><li>');
 
   // close lists
-  h = h.replace(/\[\[\/UL\]\]/g, '</li></ul>');
-  h = h.replace(/\[\[\/OL\]\]/g, '</li></ol>');
-
+  h = h.replace(/\[\[\/UL\]\]/g, '</li></ul>')
+       .replace(/\[\[\/OL\]\]/g, '</li></ol>');
   return h;
 }
 
@@ -183,19 +179,31 @@ function unmaskLists(h){
   }
 
   function proseToHTML(s){
-    s = squishSoloInlineMath(s);   // <-- add this line
-    // (the rest unchanged)
-    s = maskLatexLists(s);
-    s = s.replace(/^\s*Let\s*(?=\[\[(?:UL|OL)_OPEN\]\])/,'');
-    let h = escapeHTML(s || '');
-    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-     .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
-     .replace(/\\emph\{([^}]*)\}/g, '<em>$1</em>')
-     .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
-     .replace(/\s*\n+\s*/g, ' ');
+  if (s == null) return '';
+  s = s.replace(/\r\n?/g, '\n');                 // keep newlines for \item detection
+  s = maskLatexLists(s);                         // FIRST: capture \item and labels
+  s = s.replace(/^\s*Let\s*(?=\[\[(?:UL|OL)_OPEN\]\])/, ''); // your existing guard
 
-    return unmaskLists(h).trim();
-  }
+  // escape HTML but keep TeX intact
+  let h = escapeHTML(s);
+
+  // TeX text escapes (so \% shows as % etc.)
+  h = h.replace(/\\%/g, '%')
+       .replace(/\\&/g, '&')
+       .replace(/\\_/g, '_')
+       .replace(/\\#/g, '#');
+
+  // simple TeX text styles
+  h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+       .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
+       .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
+
+  // now collapse newlines so inline $…$ doesn't get split
+  h = h.replace(/\s*\n+\s*/g, ' ');
+
+  return unmaskLists(h).trim();
+}
+
 
   function normalizeTex(s){
     if(!s) return '';
