@@ -14,6 +14,8 @@
   #qCard mjx-container { vertical-align: baseline; }
   #qCard mjx-container svg { display: inline !important; }
   #qCard mjx-container[display="true"] svg { display: block !important; } /* keep display math block */
+  #qCard .has-label { list-style: none; }
+  #qCard .li-label { font-weight:600; margin-right:.4rem; }
 
   /* Dark text in the white card */
   #qCard, #qCard * { color:#0f172a; }
@@ -114,34 +116,43 @@
 
   // NEW: make LaTeX lists render as HTML lists
   function maskLatexLists(s){
-    return (s||'')
-      .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
-      .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
-      .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
-      .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]')
-      // NOTE: match \item, optional [label], optional whitespace
-      .replace(/(^|\n)\s*\\item(?:\[[^\]]*\])?\s*/g, '$1[[LI]]');
-  }
+  return (s||'')
+    .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
+    .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
+    .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
+    .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]')
+    // \item or \item[<label>]  →  [[LI]] or [[LI:<label>]]
+    .replace(/(^|\n)\s*\\item(?:\s*\[([^\]]+)\])?\s*/g, (_, pre, lbl) => {
+      return `${pre}[[LI${lbl ? ':'+lbl : ''}]]`;
+    });
+}
 
-  function unmaskLists(h){
-  // Turn markers into HTML and ensure proper <li>…</li> wrapping
+function unmaskLists(h){
+  // list containers
   h = (h||'')
     .replace(/\[\[UL_OPEN\]\]/g, '<ul class="list-disc ml-6">')
     .replace(/\[\[OL_OPEN\]\]/g, '<ol class="list-decimal ml-6">')
     .replace(/\[\[UL_CLOSE\]\]/g, '[[/UL]]')
-    .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]')
-    .replace(/\[\[LI\]\]/g, '</li><li>');
+    .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]');
 
-  // Normalize starts: <ul></li><li> → <ul><li> (same for <ol>)
+  // items: if there’s a label, show it and suppress the bullet
+  h = h.replace(/\[\[LI(?::([^\]]+))?\]\]/g, (_, lbl) => {
+    return lbl
+      ? '</li><li class="has-label"><span class="li-label">' + lbl + '</span> '
+      : '</li><li>';
+  });
+
+  // normalize starts
   h = h.replace(/<ul([^>]*)>\s*<\/li><li>/g, '<ul$1><li>');
   h = h.replace(/<ol([^>]*)>\s*<\/li><li>/g, '<ol$1><li>');
 
-  // Close lists with a closing </li>
+  // close lists
   h = h.replace(/\[\[\/UL\]\]/g, '</li></ul>');
   h = h.replace(/\[\[\/OL\]\]/g, '</li></ol>');
 
   return h;
 }
+
 
   // Collapse cases where inline math sits on its own line:
   //   "\n $C$ \n"  → " $C$ "
