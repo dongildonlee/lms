@@ -101,7 +101,6 @@ def _split_top_level_items(body: str):
 
     return preamble, [_trim(x) for x in items if x.strip()]
 
-
 def _extract_item_stem_and_choices(item_text: str):
     # For one top-level \item:
     #  - remove \answer{X} (capture X)
@@ -138,28 +137,24 @@ def _extract_item_stem_and_choices(item_text: str):
     stem = _strip_comments_and_textmode_macros(stem_raw)
     return stem, choices, ans
 
-# -------- NEW: asset/uses support (no docstrings; comments only to avoid \u escapes) --------
-
+# -------- asset/uses support --------
 ASSET_BLOCK_RE = re.compile(
     r"(?is)"
     r"\\begin\{asset\}\{([^}]+)\}\s*"
     r"(.*?)"
     r"\\end\{asset\}\s*"
 )
-
 USES_RE = re.compile(r"\\uses\{([^}]+)\}", re.I)
 
 def _extract_assets_from_text(s: str):
     # Find and remove all \begin{asset}{key}...\end{asset} blocks in 's'.
     # Return (text_without_assets, assets_dict).
     assets = {}
-
     def repl(m):
         key = m.group(1).strip()
         content = _trim(m.group(2))
         assets[key] = content
         return ""  # strip from text
-
     cleaned = ASSET_BLOCK_RE.sub(repl, s or "")
     return _trim(cleaned), assets
 
@@ -182,7 +177,6 @@ def _prepend_assets(stem: str, assets: dict, keys: list[str]) -> str:
     return stem
 
 # ----------------------- File → Question dicts -----------------------
-
 def parse_tex_file_to_questions(path: Path):
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -216,10 +210,6 @@ def parse_tex_file_to_questions(path: Path):
             stem_no_uses, use_keys = _remove_uses_and_collect_keys(stem)
             full_stem = _prepend_assets(stem_no_uses, assets, use_keys)
 
-            # If you truly want some non-asset preamble text on every item, uncomment:
-            # if preamble_wo_assets:
-            #     full_stem = _trim(preamble_wo_assets + "\n\n" + full_stem)
-
             correct = (ans_inline or meta.get("answer") or "A").strip().upper()[:1]
             out.append({
                 "type": qtype,
@@ -242,13 +232,14 @@ def parse_tex_file_to_questions(path: Path):
     }]
 
 # ----------------------- Management command -----------------------
-
 class Command(BaseCommand):
     help = "Import LaTeX questions from a folder (supports shared assets via \\begin{asset}{key} and per-item \\uses{key})."
 
     def add_arguments(self, parser):
         parser.add_argument("root", type=str, help="Folder containing .tex files")
         parser.add_argument("--created-by", type=str, default=None, help="Username to set as author")
+        parser.add_argument("--replace", action="store_true", help="Delete existing questions previously imported from each file")
+        parser.add_argument("--dry-run", action="store_true", help="Parse and report, but do not write to the database")
 
     def handle(self, *args, **opts):
         root = Path(opts["root"]).expanduser().resolve()
@@ -269,7 +260,28 @@ class Command(BaseCommand):
 
         total = 0
         for f in files:
-            for data in parse_tex_file_to_questions(f):
+            rel = str(f.relative_to(root))
+            src_tag = f"src:{rel}"
+
+            parsed = parse_tex_file_to_questions(f)
+
+            if opts["replace"]:
+                if opts["dry_run"]:
+                    cnt = Question.objects.filter(tags__name=src_tag).count()
+                    self.stdout.write(self.style.WARNING(f"[dry-run] Would delete {cnt} old row(s) for {rel}"))
+                else:
+                    deleted = Question.objects.filter(tags__name=src_tag).delete()
+                    self.stdout.write(f"Deleted {deleted[0]} old row(s) for {rel}")
+
+            if opts["dry_run"]:
+                self.stdout.write(self.style.WARNING(f"[dry-run] Would import {len(parsed)} from {rel}"))
+                total += len(parsed)
+                continue
+
+            # Ensure a source tag exists for this file
+            srcTag, _ = Tag.objects.get_or_create(name=src_tag)
+
+            for data in parsed:
                 q = Question.objects.create(
                     type=data["type"],
                     stem_md=data["stem_tex"],      # store TeX into stem_md as before
@@ -277,11 +289,13 @@ class Command(BaseCommand):
                     correct={"choice": data["answer"]},
                     created_by=created_by,
                 )
+                # Attach any provided tags + the source tag
                 for tag_name in data["tags"]:
                     t, _ = Tag.objects.get_or_create(name=tag_name)
                     q.tags.add(t)
+                q.tags.add(srcTag)
+
                 total += 1
-                self.stdout.write(f"Imported Q{q.id} from {f.relative_to(root)}")
+                self.stdout.write(f"Imported Q{q.id} from {rel}")
 
         self.stdout.write(self.style.SUCCESS(f"Done. Imported {total} question(s)."))
-
