@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from practice.models import Question, Tag
 from django.contrib.auth.models import User
 
+# -------- Regexes --------
 HEADER_RE = re.compile(r"^%%\s*(\w+)\s*:\s*(.+)$")
 TOKEN_RE = re.compile(
     r"\\begin\{(enumerate|itemize)\}|\\end\{(enumerate|itemize)\}|\\item\b",
@@ -12,15 +13,28 @@ TOKEN_RE = re.compile(
 )
 ENUM_TOKEN_RE = re.compile(r"(\\begin\{enumerate\})|(\\end\{enumerate\})|(\\item\b)", re.M)
 
+# Shared-asset blocks and per-item uses
+ASSET_BLOCK_RE = re.compile(
+    r"(?is)"
+    r"\\begin\{asset\}\{([^}]+)\}\s*"
+    r"(.*?)"
+    r"\\end\{asset\}\s*"
+)
+USES_RE = re.compile(r"\\uses\{([^}]+)\}", re.I)
+
+
+# -------- Helpers --------
 def _trim(s: str) -> str:
     return re.sub(r"\s+\Z", "", re.sub(r"\A\s+", "", s or ""))
 
-def _strip_answer_marker(s):
+
+def _strip_answer_marker(s: str):
     m = re.search(r"\\answer\{([A-Z])\}", s)
     if not m:
         return s, None
     ans = m.group(1)
     return s[:m.start()] + s[m.end():], ans
+
 
 def _strip_comments_and_textmode_macros(s: str) -> str:
     # Drop pure-comment lines
@@ -29,9 +43,10 @@ def _strip_comments_and_textmode_macros(s: str) -> str:
     # Strip common spacing/formatting macros that won't display on web
     s = re.sub(r"\\noindent\b", "", s)
     s = re.sub(r"\\(big|med|small)skip\b", "", s)
-    # Soften \textbf to markdown-ish bold
+    # Soften \textbf to markdown-like bold
     s = re.sub(r"\\textbf\{([^}]*)\}", r"**\1**", s)
     return _trim(s)
+
 
 def _parse_nested_choices(block_text: str):
     # Inside an item's nested enumerate, split on top-level \item's to build choices.
@@ -45,6 +60,7 @@ def _parse_nested_choices(block_text: str):
         lab = letters[i] if i < len(letters) else str(i + 1)
         out[lab] = _trim(p)
     return out
+
 
 def _split_top_level_items(body: str):
     # Find the first top-level \begin{enumerate}
@@ -95,11 +111,12 @@ def _split_top_level_items(body: str):
                     items.append(body[current_start:tok.start()])
                 current_start = tok.end()
 
-    # Fallback: if we never saw the end, capture to EOF
-    if current_start is not None and not items:
+    # If we never saw the end, capture remainder as the last item
+    if current_start is not None:
         items.append(body[current_start:len(body)])
 
     return preamble, [_trim(x) for x in items if x.strip()]
+
 
 def _extract_item_stem_and_choices(item_text: str):
     # For one top-level \item:
@@ -137,32 +154,29 @@ def _extract_item_stem_and_choices(item_text: str):
     stem = _strip_comments_and_textmode_macros(stem_raw)
     return stem, choices, ans
 
-# -------- asset/uses support --------
-ASSET_BLOCK_RE = re.compile(
-    r"(?is)"
-    r"\\begin\{asset\}\{([^}]+)\}\s*"
-    r"(.*?)"
-    r"\\end\{asset\}\s*"
-)
-USES_RE = re.compile(r"\\uses\{([^}]+)\}", re.I)
 
+# -------- asset/uses support --------
 def _extract_assets_from_text(s: str):
     # Find and remove all \begin{asset}{key}...\end{asset} blocks in 's'.
     # Return (text_without_assets, assets_dict).
     assets = {}
+
     def repl(m):
         key = m.group(1).strip()
         content = _trim(m.group(2))
         assets[key] = content
         return ""  # strip from text
+
     cleaned = ASSET_BLOCK_RE.sub(repl, s or "")
     return _trim(cleaned), assets
+
 
 def _remove_uses_and_collect_keys(s: str):
     # Remove all \uses{key} markers from 's' and return (cleaned_text, [keys]).
     keys = USES_RE.findall(s or "")
     cleaned = USES_RE.sub("", s or "")
     return _trim(cleaned), [k.strip() for k in keys if k.strip()]
+
 
 def _prepend_assets(stem: str, assets: dict, keys: list[str]) -> str:
     # Prepend selected asset blocks (dedup, preserve first-seen order) to the stem.
@@ -175,6 +189,7 @@ def _prepend_assets(stem: str, assets: dict, keys: list[str]) -> str:
     if blocks:
         return _trim("\n\n".join(blocks + [stem]))
     return stem
+
 
 # ----------------------- File → Question dicts -----------------------
 def parse_tex_file_to_questions(path: Path):
@@ -197,7 +212,7 @@ def parse_tex_file_to_questions(path: Path):
     preamble, items = _split_top_level_items(body)
 
     # Extract shared assets from preamble only
-    preamble_wo_assets, assets = _extract_assets_from_text(preamble)
+    _preamble_wo_assets, assets = _extract_assets_from_text(preamble)
 
     # Tags and type from headers
     tags = [t.strip() for t in (meta.get("tags", "").strip().strip("[]")).split(",") if t.strip()]
@@ -231,9 +246,10 @@ def parse_tex_file_to_questions(path: Path):
         "choices": None
     }]
 
+
 # ----------------------- Management command -----------------------
 class Command(BaseCommand):
-    help = "Import LaTeX questions from a folder (supports shared assets via \\begin{asset}{key} and per-item \\uses{key})."
+    help = r"Import LaTeX questions from a folder (supports shared assets via \begin{asset}{key} and per-item \uses{key})."
 
     def add_arguments(self, parser):
         parser.add_argument("root", type=str, help="Folder containing .tex files")
@@ -253,14 +269,15 @@ class Command(BaseCommand):
             except User.DoesNotExist:
                 self.stdout.write(self.style.WARNING(f"User {opts['created_by']} not found; leaving created_by null."))
 
-        files = list(root.rglob("*.tex"))
+        files = sorted(root.rglob("*.tex"))  # stable order
         if not files:
             self.stdout.write("No .tex files found.")
             return
 
         total = 0
         for f in files:
-            rel = str(f.relative_to(root))
+            # Normalize the relative path so tags are consistent across OSes
+            rel = str(f.relative_to(root)).replace("\\", "/")
             src_tag = f"src:{rel}"
 
             parsed = parse_tex_file_to_questions(f)
