@@ -119,16 +119,29 @@
       .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
       .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
       .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]')
-      .replace(/^\s*\\item\s+/gm,       '[[LI]]');
+      // NOTE: match \item, optional [label], optional whitespace
+      .replace(/(^|\n)\s*\\item(?:\[[^\]]*\])?\s*/g, '$1[[LI]]');
   }
+
   function unmaskLists(h){
-    return (h||'')
-      .replace(/\[\[UL_OPEN\]\]/g,  '<ul class="list-disc ml-6">')
-      .replace(/\[\[UL_CLOSE\]\]/g, '</ul>')
-      .replace(/\[\[OL_OPEN\]\]/g,  '<ol class="list-decimal ml-6">')
-      .replace(/\[\[OL_CLOSE\]\]/g, '</ol>')
-      .replace(/\[\[LI\]\]/g,       '<li>');
-  }
+  // Turn markers into HTML and ensure proper <li>…</li> wrapping
+  h = (h||'')
+    .replace(/\[\[UL_OPEN\]\]/g, '<ul class="list-disc ml-6">')
+    .replace(/\[\[OL_OPEN\]\]/g, '<ol class="list-decimal ml-6">')
+    .replace(/\[\[UL_CLOSE\]\]/g, '[[/UL]]')
+    .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]')
+    .replace(/\[\[LI\]\]/g, '</li><li>');
+
+  // Normalize starts: <ul></li><li> → <ul><li> (same for <ol>)
+  h = h.replace(/<ul([^>]*)>\s*<\/li><li>/g, '<ul$1><li>');
+  h = h.replace(/<ol([^>]*)>\s*<\/li><li>/g, '<ol$1><li>');
+
+  // Close lists with a closing </li>
+  h = h.replace(/\[\[\/UL\]\]/g, '</li></ul>');
+  h = h.replace(/\[\[\/OL\]\]/g, '</li></ol>');
+
+  return h;
+}
 
   // Collapse cases where inline math sits on its own line:
   //   "\n $C$ \n"  → " $C$ "
@@ -162,6 +175,7 @@
     s = squishSoloInlineMath(s);   // <-- add this line
     // (the rest unchanged)
     s = maskLatexLists(s);
+    s = s.replace(/^\s*Let\s*(?=\[\[(?:UL|OL)_OPEN\]\])/,'');
     let h = escapeHTML(s || '');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
      .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
