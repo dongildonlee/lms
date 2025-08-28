@@ -35,6 +35,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 
+from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -731,3 +733,32 @@ def student_stats_api(request):
         "avg_view_s": round(avg_view_ms / 1000.0, 2),
     }
     return JsonResponse(data)
+
+
+@csrf_exempt                 # allow sendBeacon() without CSRF header
+@login_required
+def attempt_view_log(request, attempt_id):
+    """POST {question_id, view_ms} → create AttemptView row for this user/attempt."""
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "POST only"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        qid = int(payload.get("question_id"))
+        ms  = max(0, int(payload.get("view_ms", 0)))
+    except Exception:
+        return HttpResponseBadRequest("bad json")
+
+    # Verify the attempt belongs to the current user
+    try:
+        attempt = Attempt.objects.get(id=attempt_id, student=request.user)
+    except Attempt.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "attempt not found"}, status=404)
+
+    AttemptView.objects.create(
+        attempt=attempt,
+        question_id=qid,
+        view_ms=ms,
+        created_at=timezone.now(),
+    )
+    return JsonResponse({"ok": True, "saved": True})

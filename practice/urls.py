@@ -28,6 +28,8 @@ urlpatterns = [
 
     # Stats API for the signed-in student    
     path("api/stats/me/", views_stats.stats_me, name="stats_me"),
+
+    path("api/attempts/<int:attempt_id>/views/", views.attempt_view_log, name="attempt_view_log"),
 ]
 
 
