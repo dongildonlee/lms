@@ -83,7 +83,22 @@ class AttemptItem(models.Model):
     diag_snapshot = models.JSONField(default=list, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
+class AttemptView(models.Model):
+    attempt  = models.ForeignKey('Attempt',  on_delete=models.CASCADE, related_name='views')
+    question = models.ForeignKey('Question', on_delete=models.CASCADE, related_name='views')
+    view_ms  = models.PositiveIntegerField()  # accumulated milliseconds per view session
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['attempt']),
+            models.Index(fields=['question']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f'AttemptView(a={self.attempt_id}, q={self.question_id}, ms={self.view_ms})'
+    
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="studentprofile")
     sid = models.CharField(max_length=20, unique=True, blank=True)  # human-friendly Student ID, e.g. "S000123"
@@ -107,4 +122,18 @@ def ensure_student_profile(sender, instance, created, **kwargs):
         profile = StudentProfile.objects.create(user=instance)
         profile.sid = f"S{instance.id:06d}"
         profile.save()
+
+class AttemptViewLog(models.Model):
+    attempt  = models.ForeignKey('Attempt', on_delete=models.CASCADE, related_name='view_logs')
+    question = models.ForeignKey('Question', on_delete=models.CASCADE, related_name='view_logs')
+    view_ms  = models.PositiveIntegerField(default=0)  # milliseconds viewed in this slice
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['attempt', 'question', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'Attempt {self.attempt_id} Q{self.question_id}: {self.view_ms} ms'
 
