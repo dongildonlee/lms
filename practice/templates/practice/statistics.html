@@ -12,20 +12,20 @@
 
     <div id="accBarWrapper" class="w-full h-8 rounded-lg overflow-hidden bg-red-200 relative">
       <div id="accGreen" class="h-full bg-green-500" style="width:0%"></div>
-      <div id="accLabel" class="absolute inset-0 flex items-center justify-center font-semibold text-white drop-shadow"></div>
+      <div id="accLabel" class="absolute inset-0 flex items-center justify-center font-semibold text-white drop-shadow">0%</div>
     </div>
 
     <div class="mt-3 text-slate-700">
-      <span id="accCounts"></span>
+      <span id="accCounts">0 correct out of 0 viewed</span>
     </div>
   </div>
 
   <!-- Avg viewing time card -->
   <div class="bg-white rounded-2xl p-6 shadow border border-gray-200">
     <h2 class="text-xl font-semibold mb-3 text-slate-900">Average time per problem</h2>
-    <p class="text-slate-600 mb-4">Average of total time spent viewing each question.</p>
+    <p class="text-slate-600 mb-4">Average of time spent viewing each question.</p>
     <div class="text-4xl font-bold text-slate-900">
-      <span id="avgSec">–</span><span class="text-xl font-semibold text-slate-500"> s</span>
+      <span id="avgSec">0.00</span><span class="text-xl font-semibold text-slate-500"> s</span>
     </div>
   </div>
 </div>
@@ -40,33 +40,67 @@
 
 {% block scripts %}
 <script>
-async function fetchJSON(url){
-  const r = await fetch(url, { headers:{'Accept':'application/json'} });
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-
-function renderStats(s){
-  // progress bar
-  const pct = Math.max(0, Math.min(100, s.accuracy_pct || 0));
-  document.getElementById('accGreen').style.width = pct + '%';
-  document.getElementById('accLabel').textContent = `${pct}%`;
-
-  // counts
-  document.getElementById('accCounts').textContent =
-    `${s.correct_viewed_count} correct out of ${s.viewed_count} viewed`;
-
-  // avg seconds
-  document.getElementById('avgSec').textContent = (s.avg_view_s ?? 0).toFixed(2);
-}
-
-(async function init(){
-  try{
-    const data = await fetchJSON('/api/stats/me/');
-    renderStats(data);
-  }catch(e){
-    console.error(e);
+/**
+ * Try /api/me/stats/ first; if it 404s, fall back to /api/stats/me/.
+ * Normalize the result into { correct, total, pct, avg_s }.
+ */
+async function loadStats() {
+  async function fetchJSON(url) {
+    const r = await fetch(url, { credentials: 'same-origin', headers:{'Accept':'application/json'} });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
   }
-})();
+
+  let raw;
+  try {
+    raw = await fetchJSON('/api/me/stats/');
+  } catch (e) {
+    // fallback shape
+    raw = await fetchJSON('/api/stats/me/');
+  }
+
+  // Support either response shape:
+  //  A) { total_answered, total_correct, avg_view_ms }
+  //  B) { viewed_count, correct_viewed_count, accuracy_pct, avg_view_s }
+  const total   = (raw.viewed_count ?? raw.total_answered ?? 0) | 0;
+  const correct = (raw.correct_viewed_count ?? raw.total_correct ?? 0) | 0;
+
+  // prefer server-provided accuracy_pct; otherwise compute
+  const pct = Math.max(0, Math.min(100,
+    raw.accuracy_pct != null
+      ? Math.round(raw.accuracy_pct)
+      : (total ? Math.round(100 * correct / total) : 0)
+  ));
+
+  // average seconds: prefer avg_view_s; otherwise convert ms->s
+  const avg_s = (raw.avg_view_s != null)
+    ? Number(raw.avg_view_s)
+    : Number((raw.avg_view_ms ?? 0) / 1000);
+
+  return { correct, total, pct, avg_s: isFinite(avg_s) ? avg_s : 0 };
+}
+
+function renderStats(n) {
+  const accGreen  = document.getElementById('accGreen');
+  const accLabel  = document.getElementById('accLabel');
+  const accCounts = document.getElementById('accCounts');
+  const avgSec    = document.getElementById('avgSec');
+
+  if (accGreen)  accGreen.style.width = n.pct + '%';
+  if (accLabel)  accLabel.textContent = n.pct + '%';
+  if (accCounts) accCounts.textContent = `${n.correct} correct out of ${n.total} viewed`;
+  if (avgSec)    avgSec.textContent   = n.avg_s.toFixed(2);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const stats = await loadStats();
+    console.log('stats:', stats);
+    renderStats(stats);
+  } catch (err) {
+    console.error('Failed to load stats', err);
+  }
+});
 </script>
 {% endblock %}
+
