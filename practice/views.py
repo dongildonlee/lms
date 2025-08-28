@@ -25,7 +25,7 @@ import hashlib
 
 from django.db.models.functions import Random
 
-from .models import Question, Attempt, AttemptItem, Tag
+from .models import Question, Attempt, AttemptItem, Tag, AttemptView
 from .forms import StudentSignupForm
 from django.template.loader import render_to_string
 from pathlib import Path
@@ -678,3 +678,56 @@ def log_attempt_view(request, attempt_id):
     except Exception as e:
         # Swallow missing model / lookup issues so frontend never breaks
         return JsonResponse({"ok": True, "saved": False, "note": str(e)})
+    
+
+@login_required
+def student_stats_page(request):
+    """Renders the simple stats UI; data is fetched via /api/stats/me/."""
+    return render(request, "practice/statistics.html")
+
+@login_required
+def student_stats_api(request):
+    user = request.user
+
+    # All attempts by this student
+    attempt_ids = list(
+        Attempt.objects.filter(student=user).values_list("id", flat=True)
+    )
+
+    # Distinct questions the student VIEWED (denominator),
+    # and total ms per (attempt, question)
+    # NOTE: multiple logs merge into one total per question
+    viewed_pairs_qs = (
+        AttemptView.objects.filter(attempt_id__in=attempt_ids)
+        .values("attempt_id", "question_id")
+        .annotate(total_ms=Sum("view_ms"))
+    )
+    viewed_pairs = [(r["attempt_id"], r["question_id"]) for r in viewed_pairs_qs]
+    viewed_count = len(viewed_pairs)
+
+    # Distinct (attempt, question) that were answered correctly at least once
+    correct_pairs = set(
+        AttemptItem.objects.filter(attempt_id__in=attempt_ids, is_correct=True)
+        .values_list("attempt_id", "question_id")
+        .distinct()
+    )
+
+    # Numerator: of the viewed questions, how many ended up correct?
+    correct_viewed_count = sum(1 for pair in viewed_pairs if pair in correct_pairs)
+
+    accuracy = (correct_viewed_count / viewed_count) if viewed_count else 0.0
+
+    # Average view time per question (sum logs per question, then average)
+    avg_view_ms = 0
+    if viewed_pairs_qs.exists():
+        avg_view_ms = viewed_pairs_qs.aggregate(avg=Avg("total_ms"))["avg"] or 0
+
+    data = {
+        "viewed_count": viewed_count,
+        "correct_viewed_count": correct_viewed_count,
+        "accuracy": accuracy,                # 0–1
+        "accuracy_pct": round(accuracy * 100, 1),
+        "avg_view_ms": round(avg_view_ms),   # integer ms
+        "avg_view_s": round(avg_view_ms / 1000.0, 2),
+    }
+    return JsonResponse(data)

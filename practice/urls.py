@@ -9,6 +9,7 @@ urlpatterns = [
     path("dashboard/", views.student_dashboard, name="student_dashboard"),
     path("teacher/", views.teacher_page, name="teacher_page"),
     path("accounts/register/", views.register, name="register"),
+    path("statistics/", views.student_stats_page, name="student_stats_page"),
 
     # APIs
     path("api/ping", views.ping, name="ping"),
@@ -22,9 +23,7 @@ urlpatterns = [
     # LaTeX compile endpoint (PDF only)
     path("practice/tex/pdf/", tex_pdf, name="tex_pdf"),
 
-    # REMOVE these unless you actually have the views:
-    # path("", views.practice_page, name="practice"),           # only if you want root=practice
-    # path("assets/q/<int:pk>.<str:fmt>", views.question_asset, name="question_asset"),
+    path("api/stats/me/", views.student_stats_api, name="student_stats_api"),
 ]
 
 

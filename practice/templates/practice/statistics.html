@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Statistics | Wrong-Answer Packets{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-semibold mb-6 text-white drop-shadow">Your Statistics</h1>
+
+<div class="grid gap-6 md:grid-cols-2">
+  <!-- Accuracy card -->
+  <div class="bg-white rounded-2xl p-6 shadow border border-gray-200">
+    <h2 class="text-xl font-semibold mb-3 text-slate-900">Accuracy</h2>
+    <p class="text-slate-600 mb-4">(# correct of all questions you viewed)</p>
+
+    <div id="accBarWrapper" class="w-full h-8 rounded-lg overflow-hidden bg-red-200 relative">
+      <div id="accGreen" class="h-full bg-green-500" style="width:0%"></div>
+      <div id="accLabel" class="absolute inset-0 flex items-center justify-center font-semibold text-white drop-shadow"></div>
+    </div>
+
+    <div class="mt-3 text-slate-700">
+      <span id="accCounts"></span>
+    </div>
+  </div>
+
+  <!-- Avg viewing time card -->
+  <div class="bg-white rounded-2xl p-6 shadow border border-gray-200">
+    <h2 class="text-xl font-semibold mb-3 text-slate-900">Average time per problem</h2>
+    <p class="text-slate-600 mb-4">Average of total time spent viewing each question.</p>
+    <div class="text-4xl font-bold text-slate-900">
+      <span id="avgSec">–</span><span class="text-xl font-semibold text-slate-500"> s</span>
+    </div>
+  </div>
+</div>
+
+<div class="mt-8">
+  <a href="/dashboard/"
+     class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition">
+    Back to Dashboard
+  </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function fetchJSON(url){
+  const r = await fetch(url, { headers:{'Accept':'application/json'} });
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function renderStats(s){
+  // progress bar
+  const pct = Math.max(0, Math.min(100, s.accuracy_pct || 0));
+  document.getElementById('accGreen').style.width = pct + '%';
+  document.getElementById('accLabel').textContent = `${pct}%`;
+
+  // counts
+  document.getElementById('accCounts').textContent =
+    `${s.correct_viewed_count} correct out of ${s.viewed_count} viewed`;
+
+  // avg seconds
+  document.getElementById('avgSec').textContent = (s.avg_view_s ?? 0).toFixed(2);
+}
+
+(async function init(){
+  try{
+    const data = await fetchJSON('/api/stats/me/');
+    renderStats(data);
+  }catch(e){
+    console.error(e);
+  }
+})();
+</script>
+{% endblock %}
