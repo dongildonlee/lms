@@ -76,6 +76,58 @@
   let qTotal    = 0;   // total questions for the current tag
   let renderToken = 0; // cancels stale async writes
 
+  let viewTimer = { start: 0, acc: 0, running: false };
+
+function vtReset(){ viewTimer = { start: 0, acc: 0, running: false }; }
+function vtStart(){
+  if (!viewTimer.running){
+    viewTimer.start = performance.now();
+    viewTimer.running = true;
+  }
+}
+function vtPause(){
+  if (viewTimer.running){
+    viewTimer.acc += performance.now() - viewTimer.start;
+    viewTimer.running = false;
+  }
+}
+function vtMs(){
+  return Math.round(viewTimer.acc + (viewTimer.running ? (performance.now() - viewTimer.start) : 0));
+}
+
+async function logViewIfAny(){
+  try{
+    vtPause();
+    const ms = vtMs();
+    console.log('[logViewIfAny]', { attemptId, qid: currentQ?.id, ms });  // <-- add this line
+    if (!attemptId || !currentQ || ms <= 0) return;
+    await api(`/api/attempts/${attemptId}/views/`, {
+      method: 'POST',
+      body: JSON.stringify({ question_id: currentQ.id, view_ms: ms })
+    });
+  }catch(e){ console.warn('view log failed', e); }
+}
+
+
+// pause/resume on visibility changes
+document.addEventListener('visibilitychange', () => (document.hidden ? vtPause() : vtStart()));
+window.addEventListener('blur', vtPause);
+window.addEventListener('focus', vtStart);
+
+// best-effort log on unload
+window.addEventListener('pagehide', () => {
+  try{
+    vtPause();
+    const ms = vtMs();
+    if (!attemptId || !currentQ || ms <= 0) return;
+    const url = `/api/attempts/${attemptId}/views/`;
+    const blob = new Blob([JSON.stringify({question_id: currentQ.id, view_ms: ms})], {type: 'application/json'});
+    if (navigator.sendBeacon) navigator.sendBeacon(url, blob);
+  }catch(_){}
+});
+
+
+
   // --- CSRF ---
   function getCookie(name) {
     const value = `; ${document.cookie}`;
@@ -392,6 +444,9 @@ function unmaskLists(h){
 
     if (token !== renderToken) return;
     await typeset(choicesDiv);
+    // start a fresh view-session for this question
+    vtReset();
+    vtStart();
     if (token !== renderToken) return;
 
     $('#feedback').textContent = '';
@@ -423,7 +478,14 @@ function unmaskLists(h){
       $('#feedback').className   = 'err';
     }
   }
-  document.getElementById('nextBtn')?.addEventListener('click', loadQuestion);
+  const nextBtn = document.getElementById('nextBtn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', async () => {
+      await logViewIfAny();   // record time spent on the current question
+      vtReset();              // clear the timer
+      await loadQuestion();   // show the next one
+    });
+  }
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
