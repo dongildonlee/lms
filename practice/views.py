@@ -30,6 +30,12 @@ from .forms import StudentSignupForm
 from django.template.loader import render_to_string
 from pathlib import Path
 
+import json
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+
+
 logger = logging.getLogger(__name__)
 
 def _normalize_tex(s: str) -> str:
@@ -646,3 +652,29 @@ def question_asset(request, pk: int, fmt: str = "svg"):
         raise Http404("Asset missing")
     ctype = "image/svg+xml" if fmt == "svg" else "image/png"
     return FileResponse(open(abs_path, "rb"), content_type=ctype)
+
+@csrf_exempt
+@require_POST
+def log_attempt_view(request, attempt_id):
+    """
+    Records a view slice (in ms) for a question within an attempt.
+    Safe: if AttemptView model isn't present, returns ok without saving.
+    """
+    try:
+        data = json.loads(request.body or "{}")
+        question_id = int(data.get("question_id") or 0)
+        view_ms = max(0, int(data.get("view_ms") or 0))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "bad-json"}, status=400)
+
+    # If you don't want persistence yet, this already returns 200 OK.
+    # If the model exists, we'll try to save; if it doesn't, we just no-op.
+    try:
+        from .models import AttemptView, Attempt, Question  # may not exist yet
+        att = Attempt.objects.get(id=attempt_id)
+        q   = Question.objects.get(id=question_id)
+        AttemptView.objects.create(attempt=att, question=q, view_ms=view_ms)
+        return JsonResponse({"ok": True, "saved": True})
+    except Exception as e:
+        # Swallow missing model / lookup issues so frontend never breaks
+        return JsonResponse({"ok": True, "saved": False, "note": str(e)})

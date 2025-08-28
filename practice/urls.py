@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from .views_tex import tex_pdf  # only pdf
+from .views import log_attempt_view
 
 urlpatterns = [
     # Pages
@@ -16,6 +17,7 @@ urlpatterns = [
     path("api/attempts/<int:attempt_id>/items/", views.submit_attempt_item, name="submit_attempt_item"),
     path("api/students/<int:student_id>/wrong-questions/", views.latest_incorrects, name="latest_incorrects"),
     path("api/students/<int:student_id>/wrong-questions/pdf", views.wrong_questions_pdf, name="wrong_questions_pdf"),
+    path("api/attempts/<int:attempt_id>/views/", log_attempt_view, name="attempt_view_log"),
 
     # LaTeX compile endpoint (PDF only)
     path("practice/tex/pdf/", tex_pdf, name="tex_pdf"),
