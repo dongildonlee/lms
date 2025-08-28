@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from .views_tex import tex_pdf  # only pdf
 from .views import log_attempt_view
+from . import views_stats
 
 urlpatterns = [
     # Pages
@@ -24,6 +25,9 @@ urlpatterns = [
     path("practice/tex/pdf/", tex_pdf, name="tex_pdf"),
 
     path("api/stats/me/", views.student_stats_api, name="student_stats_api"),
+
+    # Stats API for the signed-in student    
+    path("api/stats/me/", views_stats.stats_me, name="stats_me"),
 ]
 
 
