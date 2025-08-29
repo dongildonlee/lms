@@ -78,7 +78,7 @@ def stats_me(request):
         if was_correct:
             d['correct'] += 1
 
-    # --- Compose breakdown & derive overall from the SAME pool ---------------
+        # --- Compose breakdown (keep rounding only for display) -----------------
     breakdown = []
     for d in groups.values():
         if d['viewed'] <= 0:
@@ -92,10 +92,10 @@ def stats_me(request):
         })
     breakdown.sort(key=lambda x: x['label'].lower())
 
-    # overall computed as weighted average of slices (so it always matches UI)
-    overall_viewed   = sum(b['viewed_count'] for b in breakdown)
-    overall_correct  = sum(b['correct_viewed_count'] for b in breakdown)
-    overall_total_ms = sum((b['avg_view_s'] * 1000.0) * b['viewed_count'] for b in breakdown)
+    # --- Overall: derive from RAW totals to avoid double rounding -----------
+    overall_viewed   = sum(d['viewed']    for d in groups.values())
+    overall_correct  = sum(d['correct']   for d in groups.values())
+    overall_total_ms = sum(d['total_ms']  for d in groups.values())
 
     if overall_viewed:
         accuracy_pct = round((overall_correct * 100.0) / overall_viewed)
@@ -112,6 +112,7 @@ def stats_me(request):
         "avg_view_s": avg_view_s,
         "breakdown": breakdown,
     })
+
 
 
 
