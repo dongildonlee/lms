@@ -77,6 +77,8 @@
   let renderToken = 0; // cancels stale async writes
 
   let viewTimer = { start: 0, acc: 0, running: false };
+  let seenIds = new Set();   // track seen question IDs this session
+
 
 function vtReset(){ viewTimer = { start: 0, acc: 0, running: false }; }
 function vtStart(){
@@ -345,20 +347,32 @@ function unmaskLists(h){
 
   try{
     const tag = new URLSearchParams(location.search).get('tag') || '';
+    const exclude = Array.from(seenIds);
     const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=-id&_t=${Date.now()}`
-           + (tag ? `&tag=${encodeURIComponent(tag)}` : '');
+              + (tag ? `&tag=${encodeURIComponent(tag)}` : '')
+              + (exclude.length ? `&exclude=${encodeURIComponent(exclude.join(','))}` : '');
+
     const qRes = await api(url);
     if (token !== renderToken) return;
 
     if (!qRes.count || !qRes.questions?.length) {
-      $('#stem').innerHTML = 'No questions found.';
+      $('#stem').innerHTML = 'No unseen questions left for this filter.';
       $('#choices').innerHTML = '';
       $('#feedback').textContent = '';
+
+      // Optional: reset button so students can restart the pool
+      const btn = document.createElement('button');
+      btn.className = 'choice-btn';
+      btn.textContent = 'Restart session (allow repeats)';
+      btn.onclick = () => { seenIds.clear(); qOffset = 0; loadQuestion(); };
+      $('#choices').appendChild(btn);
+
       await typeset();
       return;
     }
 
     currentQ = qRes.questions[0];
+    seenIds.add(currentQ.id);   // NEW: avoid repeats
     qTotal   = qRes.count || qTotal;
     qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
 

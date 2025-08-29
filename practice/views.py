@@ -9,6 +9,7 @@ from django.http import FileResponse, HttpResponse, HttpResponseBadRequest, Http
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET
 from django.conf import settings
+from django.db.models import Sum, Avg
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -242,6 +243,17 @@ def get_questions(request):
         except ValueError:
             limit = 1
 
+        # --- NEW: exclude list from client (comma-separated IDs) -------------
+        exclude_raw = (request.query_params.get("exclude") or "").strip()
+        exclude_ids = []
+        if exclude_raw:
+            parts = [p.strip() for p in exclude_raw.split(",") if p.strip()]
+            for p in parts[:2000]:     # cap to keep the SQL IN() sane
+                try:
+                    exclude_ids.append(int(p))
+                except ValueError:
+                    pass
+
         qs = Question.objects.all()
 
         # Student subjects (optional restriction)
@@ -255,14 +267,17 @@ def get_questions(request):
                 allowed_ids = list(allowed_tags.values_list("id", flat=True))
                 subject_ids = list(subjects_qs.values_list("id", flat=True))
                 if not set(allowed_ids) & set(subject_ids):
-                    # not allowed: return no questions
                     return Response({"count": 0, "questions": []})
             qs = qs.filter(tags__in=allowed_tags).distinct()
         else:
-            # No tag given: restrict to student's subjects if they have any
             if subjects_qs is not None:
                 qs = qs.filter(tags__in=subjects_qs).distinct()
 
+        # --- NEW: apply exclude BEFORE ordering/slicing -----------------------
+        if exclude_ids:
+            qs = qs.exclude(id__in=exclude_ids)
+
+        # Random pick from remaining
         qs = qs.order_by(Random())[:max(1, limit)]
 
         def _norm(s: str) -> str:
@@ -278,12 +293,11 @@ def get_questions(request):
             out.append({
                 "id": q.id,
                 "type": q.type,
-                "stem_md": q.stem_md or "",              # RAW (no _norm)
-                "choices": (q.choices or {}),            # RAW (no per-choice _norm)
+                "stem_md": q.stem_md or "",   # keep raw; frontend handles TeX/HTML
+                "choices": (q.choices or {}),
                 "version": q.version,
                 "tags": list(q.tags.values_list("name", flat=True)),
             })
-
 
         return Response({"count": len(out), "questions": out})
     except Exception as e:
