@@ -37,6 +37,7 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 
 from django.utils import timezone
+from .views_tex import compile_tex_bytes
 
 
 logger = logging.getLogger(__name__)
@@ -480,9 +481,12 @@ def wrong_questions_pdf(request, student_id: int):
     }
 
     try:
-        pdf_bytes = _render_latex_pdf_from_template("print/missed_problems.tex", ctx)
+        # Render the LaTeX template to a full TeX document string
+        tex = render_to_string("print/missed_problems.tex", ctx)
+        # Compile to PDF with tectonic
+        pdf_bytes = compile_tex_bytes(tex)
     except Exception as e:
-        # If LaTeX isn’t available or compilation fails, fallback to the simple PDF
+        # Fallback to ReportLab simple PDF if LaTeX fails
         logger.exception("LaTeX PDF failed; falling back to ReportLab")
         pdf_bytes = _make_pdf(student_id, qs)
 
