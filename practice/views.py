@@ -39,7 +39,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from .views_tex import compile_tex_bytes
 
-from .views_tex import render_latex_pdf_from_template 
+
 logger = logging.getLogger(__name__)
 
 def _normalize_tex(s: str) -> str:
@@ -466,6 +466,8 @@ def _build_latex_doc(student_id: int, questions) -> str:
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def wrong_questions_pdf(request, student_id: int):
     # only owner or teacher
     if student_id != request.user.id and not user_is_teacher(request.user):
@@ -473,25 +475,36 @@ def wrong_questions_pdf(request, student_id: int):
 
     qs = _latest_wrong_questions(student_id)
 
-    # Build context for the .tex template
     sid = getattr(getattr(request.user, "studentprofile", None), "sid", f"S{student_id:06d}")
     ctx = {
         "sid": sid,
         "questions": [{"stem_md": q.stem_md or "", "choices": (q.choices or {})} for q in qs],
     }
 
+    engine = "fallback"
     try:
-        # NOTE: helper name has no leading underscore
-        pdf_bytes = render_latex_pdf_from_template("print/missed_problems.tex", ctx)
-    except Exception:
-        # Make sure this never re-raises due to missing logger
+        # 1) render full LaTeX doc from template
+        tex = render_to_string("print/missed_problems.tex", ctx)
+
+        # Optional: ?debug=tex shows the TeX (so you can eyeball/Overleaf it)
+        if request.GET.get("debug") == "tex":
+            return HttpResponse(tex, content_type="text/plain; charset=utf-8")
+
+        # 2) compile with tectonic
+        pdf_bytes = compile_tex_bytes(tex)
+        engine = "tectonic"
+
+    except Exception as e:
+        # Optional: ?debug=log shows compile error/log
+        if request.GET.get("debug") == "log":
+            return HttpResponse(smart_str(e), content_type="text/plain; charset=utf-8")
         logger.exception("LaTeX PDF failed; falling back to ReportLab")
         pdf_bytes = _make_pdf(student_id, qs)
 
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'attachment; filename="still_missed_student_{student_id}.pdf"'
+    resp["X-PDF-Engine"] = engine
     return resp
-
 
 
 
