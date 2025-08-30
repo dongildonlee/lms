@@ -7,6 +7,18 @@
 \usepackage{enumitem}
 \setlist[itemize]{leftmargin=1.4em}
 
+% --- ADD THESE ---
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{textcomp} % extra symbols for T1 fonts
+% Map common Unicode “smart quotes” to TeX quotes
+\DeclareUnicodeCharacter{201C}{``}
+\DeclareUnicodeCharacter{201D}{''}
+\DeclareUnicodeCharacter{2018}{`}
+\DeclareUnicodeCharacter{2019}{'}
+% --- END ADDITIONS ---
+
 \begin{document}
 \section*{Personalized Practice --- {{ sid }}}
 
@@ -31,3 +43,4 @@ No current still-missed questions.
 {% endif %}
 
 \end{document}
+
