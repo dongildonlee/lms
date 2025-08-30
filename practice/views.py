@@ -468,10 +468,33 @@ def _build_latex_doc(student_id: int, questions) -> str:
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def wrong_questions_pdf(request, student_id: int):
+    """
+    Generate a LaTeX-compiled PDF of the student's still-missed questions.
+    Uses Tectonic; no plain-text fallback. Returns actionable error text on failure.
+    """
+
+    # --- helper to show useful LaTeX errors (filters noisy font warnings) ---
+    def _tex_error_tail(stderr: str, lines: int = 120) -> str:
+        if not stderr:
+            return "no stderr"
+        noisy_prefix = "warning: accessing absolute path"
+        keep = [ln for ln in (stderr.splitlines()) if not ln.startswith(noisy_prefix)]
+        # focus around "error:" lines for context
+        idxs = [i for i, ln in enumerate(keep) if ln.strip().startswith("error:")]
+        if idxs:
+            out = []
+            for i in idxs:
+                start = max(0, i - 3)
+                end = min(len(keep), i + 20)
+                out.extend(keep[start:end] + ["…"])
+            return "\n".join(out[-lines:])
+        return "\n".join(keep[-lines:])
+
     # only owner or teacher
     if student_id != request.user.id and not user_is_teacher(request.user):
         return Response({"detail": "Forbidden"}, status=403)
 
+    # Collect latest-wrong questions
     qs = _latest_wrong_questions(student_id)
 
     # Build context for the .tex template
@@ -486,21 +509,20 @@ def wrong_questions_pdf(request, student_id: int):
     try:
         pdf_bytes = compile_tex(tex)
     except FileNotFoundError as e:
-        # Tectonic missing
         logger.error("Tectonic not found: %s", e)
-        return Response({"detail": f"Tectonic not found: {e}"}, status=500)
+        return HttpResponse(f"Tectonic not found: {e}", status=500, content_type="text/plain")
     except subprocess.TimeoutExpired as e:
         logger.error("LaTeX compile timed out: %s", e)
-        return Response({"detail": f"LaTeX compile timed out: {e}"}, status=504)
+        return HttpResponse(f"LaTeX compile timed out: {e}", status=504, content_type="text/plain")
     except subprocess.CalledProcessError as e:
-        # Return first ~4k of stderr so you can see the exact TeX error
-        err = (e.stderr or "")[:4000]
-        logger.error("LaTeX compile error:\n%s", err)
-        return HttpResponse("LaTeX compile error:\n\n" + err, status=500, content_type="text/plain")
+        tail = _tex_error_tail(e.stderr or "")
+        logger.error("LaTeX compile error (filtered tail):\n%s", tail)
+        return HttpResponse("LaTeX compile error:\n\n" + tail, status=500, content_type="text/plain")
 
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'attachment; filename="still_missed_student_{student_id}.pdf"'
     return resp
+
 
 
 
