@@ -1,5 +1,6 @@
-import os, shutil, subprocess, tempfile, textwrap
+import os, shutil, subprocess, tempfile, textwrap, logging
 from django.conf import settings
+log = logging.getLogger(__name__)
 
 def _find_exe(name: str):
     # Prefer vendored binaries in ./bin, else PATH
@@ -77,3 +78,27 @@ def compile_to_svg(tex_source: str, dest_dir: str, base_name: str) -> str:
         if not os.path.exists(svg_out):
             raise RuntimeError("pdftocairo did not produce SVG")
         return svg_out
+    
+def compile_tex(tex_source: str, timeout: int = 60) -> bytes:
+    """
+    Compile a LaTeX string to PDF bytes using the system 'tectonic' binary.
+    Relies on existing helper '_tectonic()' to find the binary.
+    Raises FileNotFoundError, subprocess.TimeoutExpired, or CalledProcessError.
+    """
+    tectonic = _tectonic()  # your existing helper; should raise if not found
+    with tempfile.TemporaryDirectory() as tmpd:
+        tex_path = os.path.join(tmpd, "doc.tex")
+        pdf_path = os.path.join(tmpd, "doc.pdf")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(tex_source)
+
+        proc = subprocess.run(
+            [tectonic, "--keep-logs", "--synctex", "--outdir", tmpd, tex_path],
+            capture_output=True, text=True, timeout=timeout
+        )
+        if proc.returncode != 0:
+            log.error("LaTeX compile failed rc=%s\nSTDERR:\n%s", proc.returncode, proc.stderr)
+            raise subprocess.CalledProcessError(proc.returncode, proc.args, output=proc.stdout, stderr=proc.stderr)
+
+        with open(pdf_path, "rb") as f:
+            return f.read()
