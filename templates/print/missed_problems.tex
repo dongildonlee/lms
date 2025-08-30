@@ -5,17 +5,19 @@
 \usepackage{enumitem}
 \setlist[itemize]{leftmargin=1.4em}
 
-% Use XeTeX fonts that ship with TeXLive/Tectonic (reproducible)
+% Reproducible fonts that Tectonic knows
 \usepackage{fontspec}
 \defaultfontfeatures{Ligatures=TeX, Scale=MatchLowercase}
-\setmainfont{TeX Gyre Termes}        % Times-like
-\setsansfont{TeX Gyre Heros}         % Helvetica-like
-\setmonofont{TeX Gyre Cursor}        % Courier-like
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{TeX Gyre Cursor}
 
+% Math (handles UTF-8 smart quotes etc. safely with XeTeX)
 \usepackage{unicode-math}
-\setmathfont{Latin Modern Math}      % or TeX Gyre Termes Math, Pagella Math, etc.
+\setmathfont{Latin Modern Math}
 
-% Graphics
+% Figures / plots used by questions
+\usepackage{graphicx}   % for \includegraphics (in case any item uses it)
 \usepackage{tikz}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
@@ -47,6 +49,7 @@ No current still-missed questions.
 
 \end{document}
 {% endautoescape %}
+
 
 
 
