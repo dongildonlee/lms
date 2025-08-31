@@ -1,36 +1,51 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if command -v tectonic >/dev/null 2>&1; then
-  echo "Tectonic already on PATH"
-  exit 0
-fi
-
+# Always vendor a local binary for reproducibility.
+# (Do NOT early-exit just because build env has tectonic.)
 mkdir -p bin
 cd bin
+
+TT_VER="0.15.0"
 
 UNAME="$(uname -s)"
 ARCH="$(uname -m)"
 
-if [[ "$UNAME" == "Darwin" && "$ARCH" == "x86_64" ]]; then
-  URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-0.15.0/tectonic-0.15.0-x86_64-apple-darwin.tar.gz"
-elif [[ "$UNAME" == "Darwin" && "$ARCH" == "arm64" ]]; then
-  URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-0.15.0/tectonic-0.15.0-aarch64-apple-darwin.tar.gz"
-elif [[ "$UNAME" == "Linux" && "$ARCH" == "x86_64" ]]; then
-  URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-0.15.0/tectonic-0.15.0-x86_64-unknown-linux-gnu.tar.gz"
-else
-  echo "Unsupported platform: $UNAME/$ARCH"
+case "$UNAME/$ARCH" in
+  Darwin/x86_64)
+    URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-${TT_VER}/tectonic-${TT_VER}-x86_64-apple-darwin.tar.gz"
+    ;;
+  Darwin/arm64)
+    URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-${TT_VER}/tectonic-${TT_VER}-aarch64-apple-darwin.tar.gz"
+    ;;
+  Linux/x86_64)
+    URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-${TT_VER}/tectonic-${TT_VER}-x86_64-unknown-linux-gnu.tar.gz"
+    ;;
+  Linux/aarch64)
+    URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic-${TT_VER}/tectonic-${TT_VER}-aarch64-unknown-linux-gnu.tar.gz"
+    ;;
+  *)
+    echo "Unsupported platform: ${UNAME}/${ARCH}" >&2
+    exit 1
+    ;;
+esac
+
+echo "Downloading Tectonic ${TT_VER} from: ${URL}"
+curl -fsSL -o tectonic.tgz "${URL}"
+tar -xzf tectonic.tgz
+
+# Find the unpacked binary
+TT="$(find . -type f -name tectonic -perm -u+x | head -n1 || true)"
+if [[ -z "${TT}" ]]; then
+  echo "Could not find tectonic in archive" >&2
   exit 1
 fi
 
-echo "Downloading Tectonic from: $URL"
-curl -L "$URL" -o tectonic.tgz
-tar -xzf tectonic.tgz
-TT="$(find . -type f -name tectonic -perm -u+x | head -n1)"
-if [[ -z "$TT" ]]; then
-  echo "Could not find tectonic in archive"
-  exit 1
-fi
-mv "$TT" ./tectonic
+# Place (or replace) the vendored binary
+mv -f "${TT}" ./tectonic
 chmod +x ./tectonic
-echo "Installed ./bin/tectonic"
+rm -f tectonic.tgz
+
+echo "Vendored Tectonic at: $(pwd)/tectonic"
+./tectonic --version
+
