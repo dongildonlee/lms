@@ -17,11 +17,9 @@ import platform
 # ------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Ensure vendored binaries (e.g., ./bin/tectonic) are on PATH in Linux (Render)
+# Ensure vendored binaries (./bin/tectonic) are on PATH in Linux (Render)
 if platform.system() != "Darwin":
     os.environ["PATH"] = f"{BASE_DIR}/bin:" + os.environ.get("PATH", "")
-    # optional: also tell our code exactly where tectonic is if it cares
-    os.environ.setdefault("TECTONIC_BIN", str(BASE_DIR / "bin" / "tectonic"))
 
 # ------------------------------------------------------------
 # Core security & env flags
