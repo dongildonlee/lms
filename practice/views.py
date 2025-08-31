@@ -470,16 +470,15 @@ def _build_latex_doc(student_id: int, questions) -> str:
 def wrong_questions_pdf(request, student_id: int):
     """
     Generate a LaTeX-compiled PDF of the student's still-missed questions.
-    Uses Tectonic; no plain-text fallback. Returns actionable error text on failure.
+    Uses Tectonic; no plain-text fallback. In debug mode (?debug=1) returns
+    detailed diagnostics instead of a generic 500.
     """
 
-    # --- helper to show useful LaTeX errors (filters noisy font warnings) ---
     def _tex_error_tail(stderr: str, lines: int = 120) -> str:
         if not stderr:
             return "no stderr"
         noisy_prefix = "warning: accessing absolute path"
         keep = [ln for ln in (stderr.splitlines()) if not ln.startswith(noisy_prefix)]
-        # focus around "error:" lines for context
         idxs = [i for i, ln in enumerate(keep) if ln.strip().startswith("error:")]
         if idxs:
             out = []
@@ -504,26 +503,63 @@ def wrong_questions_pdf(request, student_id: int):
         "questions": [{"stem_md": q.stem_md or "", "choices": (q.choices or {})} for q in qs],
     }
 
-    # Render LaTeX and compile (NO plain-text fallback)
-    tex = render_to_string("print/missed_problems.tex", ctx)
     try:
+        # Render LaTeX
+        tex = render_to_string("print/missed_problems.tex", ctx)
+
+        # Compile with Tectonic (strict; no fallback)
         pdf_bytes = compile_tex(tex)
+
+        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="still_missed_student_{student_id}.pdf"'
+        return resp
+
     except FileNotFoundError as e:
+        # Tectonic missing
         logger.error("Tectonic not found: %s", e)
         return HttpResponse(f"Tectonic not found: {e}", status=500, content_type="text/plain")
+
     except subprocess.TimeoutExpired as e:
         logger.error("LaTeX compile timed out: %s", e)
         return HttpResponse(f"LaTeX compile timed out: {e}", status=504, content_type="text/plain")
+
     except subprocess.CalledProcessError as e:
+        # LaTeX failed: return a filtered tail so the real error is visible
         tail = _tex_error_tail(e.stderr or "")
         logger.error("LaTeX compile error (filtered tail):\n%s", tail)
         return HttpResponse("LaTeX compile error:\n\n" + tail, status=500, content_type="text/plain")
 
-    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
-    resp["Content-Disposition"] = f'attachment; filename="still_missed_student_{student_id}.pdf"'
-    return resp
+    except Exception:
+        # Catch-all: if you append ?debug=1 we’ll include details
+        import shutil, traceback
+        from django.conf import settings
+        dbg = bool(request.GET.get("debug"))
+        tb = traceback.format_exc()
+        logger.exception("Unexpected error in wrong_questions_pdf")
 
+        if dbg:
+            # quick env sanity: template existence + tectonic path resolution
+            try:
+                from django.template.loader import get_template
+                _ = get_template("print/missed_problems.tex")
+                tpl_status = "found"
+            except Exception as te:
+                tpl_status = f"missing: {te}"
 
+            which_tt = shutil.which("tectonic")
+            local_tt = os.path.join(settings.BASE_DIR, "bin", "tectonic")
+            body = (
+                "Unexpected server error (debug mode)\n\n"
+                f"TEMPLATE: {tpl_status}\n"
+                f"which(tectonic): {which_tt}\n"
+                f"local bin/tectonic exists+exec: "
+                f"{os.path.isfile(local_tt) and os.access(local_tt, os.X_OK)} -> {local_tt}\n\n"
+                f"TRACEBACK:\n{tb[-4000:]}"
+            )
+            return HttpResponse(body, status=500, content_type="text/plain")
+
+        # normal users just see 500 without internals
+        return HttpResponse("Server error", status=500, content_type="text/plain")
 
 
 
