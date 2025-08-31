@@ -1,4 +1,4 @@
-import os, shutil, subprocess, tempfile, textwrap, logging
+import os, shutil, subprocess, tempfile, textwrap, logging, pathlib
 from django.conf import settings
 log = logging.getLogger(__name__)
 
@@ -9,11 +9,37 @@ def _find_exe(name: str):
         return here_bin
     return shutil.which(name)
 
-def _tectonic():
-    exe = _find_exe("tectonic")
-    if not exe:
-        raise RuntimeError("tectonic binary not found")
-    return exe
+def _tectonic() -> str:
+    """
+    Return a usable 'tectonic' binary path.
+    Prefer system PATH (e.g., Homebrew on macOS); fall back to project ./bin.
+    Validate by running '--version' to avoid wrong-arch 'Exec format error'.
+    """
+    candidates = []
+
+    # 1) System PATH
+    path_exe = shutil.which("tectonic")
+    if path_exe:
+        candidates.append(path_exe)
+
+    # 2) Project-local bin
+    # BASE_DIR = repo root .../project/src or similar; derive from this file
+    base_dir = pathlib.Path(__file__).resolve().parents[2]  # adjust if your layout differs
+    local_exe = str(base_dir / "bin" / "tectonic")
+    if os.path.exists(local_exe):
+        candidates.append(local_exe)
+
+    # Validate each candidate
+    for exe in candidates:
+        try:
+            p = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
+            if p.returncode == 0:
+                return exe
+        except OSError as e:
+            log.warning("Skipping tectonic candidate %s: %s", exe, e)
+            continue
+
+    raise FileNotFoundError("tectonic binary not found")
 
 def _pdftocairo():
     exe = _find_exe("pdftocairo")
