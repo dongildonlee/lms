@@ -40,6 +40,15 @@
     border-color: rgba(255,255,255,.45);
     transform: translateY(-1px);
   }
+
+  /* Year picker layout for KSAT panels */
+  .year-picker{
+    display:none;
+    margin-top:12px;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .chip-action{ cursor:pointer; font-weight:600; }
 </style>
 
 <!-- Small ID pill -->
@@ -54,8 +63,7 @@
       <section class="glass p-6">
         <div class="flex items-start justify-between gap-4">
           <h2 class="glass-title text-2xl font-semibold">{{ g.parent }}</h2>
-          <a href="/practice/?tag={{ g.parent|urlencode }}"
-             class="btn btn-primary !text-white">Practice</a>
+          <a href="/practice/?tag={{ g.parent|urlencode }}" class="btn btn-primary !text-white">Practice</a>
         </div>
 
         {% if g.children %}
@@ -74,7 +82,81 @@
 {% else %}
   <p class="glass-muted">No subjects assigned yet.</p>
 {% endif %}
+
+<!-- ========================= -->
+<!-- KSAT PANELS (NEW)         -->
+<!-- ========================= -->
+<section class="mt-8">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+    <!-- KSAT - Math -->
+    <section class="glass p-6">
+      <div class="flex items-start justify-between gap-4">
+        <h2 class="glass-title text-2xl font-semibold">KSAT - Math</h2>
+        <a href="/practice/?tag=KSAT%20-%20Math" class="btn btn-primary !text-white">Practice</a>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2 items-center">
+        <button type="button"
+                class="glass-chip chip-action"
+                data-target="#ksat-math-years"
+                aria-controls="ksat-math-years"
+                aria-expanded="false">
+          Past exams
+        </button>
+      </div>
+      <div id="ksat-math-years" class="year-picker flex">
+        {% if ksat_years %}
+          {% for y in ksat_years %}
+            <a class="glass-chip" href="/practice/?tag=KSAT%20-%20Math%20{{ y }}">{{ y }}</a>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- KSAT - English -->
+    <section class="glass p-6">
+      <div class="flex items-start justify-between gap-4">
+        <h2 class="glass-title text-2xl font-semibold">KSAT - English</h2>
+        <a href="/practice/?tag=KSAT%20-%20English" class="btn btn-primary !text-white">Practice</a>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2 items-center">
+        <button type="button"
+                class="glass-chip chip-action"
+                data-target="#ksat-english-years"
+                aria-controls="ksat-english-years"
+                aria-expanded="false">
+          Past exams
+        </button>
+      </div>
+      <div id="ksat-english-years" class="year-picker flex">
+        {% if ksat_years %}
+          {% for y in ksat_years %}
+            <a class="glass-chip"
+               href="/practice/?tag=KSAT%20-%20English%20{{ y }}">
+              {{ y }}
+            </a>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </section>
+
+  </div>
+</section>
+
+<script>
+  // Toggle visibility for "Past exams" year lists
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('button[data-target]');
+    if (!btn) return;
+    const target = document.querySelector(btn.getAttribute('data-target'));
+    if (!target) return;
+    const visible = target.style.display && target.style.display !== 'none';
+    target.style.display = visible ? 'none' : 'flex';
+    btn.setAttribute('aria-expanded', String(!visible));
+  }, { passive: true });
+</script>
 {% endblock %}
+
 
 
 

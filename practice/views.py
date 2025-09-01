@@ -589,11 +589,25 @@ def student_dashboard(request):
         children = sorted(groups_map[parent], key=str.lower)
         groups.append({"parent": parent, "children": children})
 
+    # NEW: collect KSAT-English years from Tag names like "KSAT - English 2025"
+    year_tags = Tag.objects.filter(name__regex=r"^KSAT - English\s+\d{4}$")
+    years = []
+    for t in year_tags:
+        m = re.search(r"(\d{4})$", t.name)
+        if m:
+            years.append(int(m.group(1)))
+    ksat_years = sorted(set(years), reverse=True)  # e.g., [2025, 2024, 2023]
+
     return render(
         request,
         "dashboard.html",
-        {"groups": groups, "me_sid": getattr(sp, "sid", "")},
+        {
+            "groups": groups,
+            "me_sid": getattr(sp, "sid", ""),
+            "ksat_years": ksat_years,   # <-- important for the dashboard chips
+        },
     )
+
 
 
 def _tectonic_path():
