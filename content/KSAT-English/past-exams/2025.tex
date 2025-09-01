@@ -1,31 +1,41 @@
-% KSAT-English 2025 — sample (2 items)
-\documentclass[11pt]{article}
+%% tags: KSAT - English, KSAT - English 2025
+%% type: mcq
+\documentclass{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern,amsmath,amssymb}
-\usepackage[margin=1in]{geometry}
-\usepackage{enumitem}
-\newenvironment{choices}{\begin{enumerate}[label=\Alph*)]}{\end{enumerate}}
+% no-op macros the importer tolerates
+\newenvironment{asset}[1]{}{}
+\newcommand{\uses}[1]{}
 
 \begin{document}
+
+% (Optional heading — it will be ignored by the importer)
 \section*{KSAT-English 2025 — Sample Items}
 
-\noindent\textbf{18.} \emph{Which word best completes the sentence?}\\
-He was \underline{\hspace{2em}} when he heard the news.
-\begin{choices}
-\item delighted
-\item confusing
-\item jealousy
-\item careless
-\end{choices}
+\begin{enumerate}
 
-\medskip
-\noindent\textbf{19.} \emph{Which is closest in meaning to \textquotedblleft reluctant\textquotedblright?}
-\begin{choices}
-\item eager
-\item unwilling
-\item generous
-\item decisive
-\end{choices}
+% 18
+\item Which word best completes the sentence? He was \underline{\hspace{2em}} when he heard the news. \answer{A}
+\begin{enumerate}
+  \item delighted
+  \item confusing
+  \item jealousy
+  \item careless
+\end{enumerate}
 
+% 19
+\item Which is closest in meaning to ``reluctant''? \answer{B}
+\begin{enumerate}
+  \item eager
+  \item unwilling
+  \item generous
+  \item decisive
+\end{enumerate}
+
+\end{enumerate}
 \end{document}
+
+    
+
+
