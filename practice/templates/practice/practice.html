@@ -43,7 +43,7 @@
 </style>
 
 <div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
-  <div id="stem" class="text-lg mb-4 whitespace-normal leading-7"></div>
+  <div id="stem" class="text-lg mb-4 whitespace-pre-wrqp leading-7"></div>
   <div id="choices" class="space-y-2"></div>
   <div id="feedback" class="mt-4 font-semibold"></div>
 
@@ -233,30 +233,35 @@ function unmaskLists(h){
   }
 
   function proseToHTML(s){
-  if (s == null) return '';
-  s = s.replace(/\r\n?/g, '\n');                 // keep newlines for \item detection
-  s = maskLatexLists(s);                         // FIRST: capture \item and labels
-  s = s.replace(/^\s*Let\s*(?=\[\[(?:UL|OL)_OPEN\]\])/, ''); // your existing guard
+    if (s == null) return '';
+    s = s.replace(/\r\n?/g, '\n');                 // keep literal newlines
 
-  // escape HTML but keep TeX intact
-  let h = escapeHTML(s);
+    // Turn LaTeX list markup into placeholders first
+    s = maskLatexLists(s);
 
-  // TeX text escapes (so \% shows as % etc.)
-  h = h.replace(/\\%/g, '%')
-       .replace(/\\&/g, '&')
-       .replace(/\\_/g, '_')
-       .replace(/\\#/g, '#');
+    // escape HTML but keep TeX intact
+    let h = escapeHTML(s);
 
-  // simple TeX text styles
-  h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
-       .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
-       .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
+    // TeX text escapes (so \% shows as % etc.)
+    h = h.replace(/\\%/g, '%')
+        .replace(/\\&/g, '&')
+        .replace(/\\_/g, '_')
+        .replace(/\\#/g, '#');
 
-  // now collapse newlines so inline $…$ doesn't get split
-  h = h.replace(/\s*\n+\s*/g, ' ');
+    // simple TeX text styles
+    h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+        .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
+        .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
 
-  return unmaskLists(h).trim();
+    // Remove a couple of common TeX-in-prose tokens
+    h = h.replace(/\\hfill\b/g, '')
+        .replace(/\\\\\s*/g, '\n');  // treat "\\" as a newline in prose
+
+    // IMPORTANT: do NOT collapse newlines here — CSS pre-wrap will render them.
+
+    return unmaskLists(h).trim();
 }
+
 
 
   function normalizeTex(s){
@@ -390,7 +395,7 @@ function unmaskLists(h){
         `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
     }else{
       if (token !== renderToken) return;
-      $('#stem').innerHTML = proseToHTML(normalizeTex(body));
+      $('#stem').innerHTML = proseToHTML(body);
     }
 
     // ---- MathJax AFTER stem is in the DOM (Safari timing-safe) ------------
