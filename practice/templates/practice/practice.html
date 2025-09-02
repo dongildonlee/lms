@@ -232,35 +232,53 @@ function unmaskLists(h){
     return s;
   }
 
-  function proseToHTML(s){
-    if (s == null) return '';
-    s = s.replace(/\r\n?/g, '\n');                 // keep literal newlines
+  function proseToHTML(s, opts = {}){
+  const inline = !!opts.inline;     // <-- NEW: inline mode for choices
+  if (s == null) return '';
 
-    // Turn LaTeX list markup into placeholders first
-    s = maskLatexLists(s);
+  // keep author’s line breaks; treat TeX \\ as a newline
+  s = s.replace(/\r\n?/g, '\n');
+  s = s.replace(/\\\\\s*/g, '\n');
 
-    // escape HTML but keep TeX intact
-    let h = escapeHTML(s);
+  // capture lists before HTML escaping
+  s = maskLatexLists(s);
 
-    // TeX text escapes (so \% shows as % etc.)
-    h = h.replace(/\\%/g, '%')
-        .replace(/\\&/g, '&')
-        .replace(/\\_/g, '_')
-        .replace(/\\#/g, '#');
+  let h = escapeHTML(s);
 
-    // simple TeX text styles
-    h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
-        .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
-        .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
+  // simple TeX text escapes/styles
+  h = h.replace(/\\%/g, '%')
+       .replace(/\\&/g, '&')
+       .replace(/\\_/g, '_')
+       .replace(/\\#/g, '#')
+       .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+       .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
+       .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
+       .replace(/\\underline\{([^}]*)\}/g, '<u>$1</u>')
+       .replace(/\\hfill/g, ''); // no-op on web
 
-    // Remove a couple of common TeX-in-prose tokens
-    h = h.replace(/\\hfill\b/g, '')
-        .replace(/\\\\\s*/g, '\n');  // treat "\\" as a newline in prose
+  if (inline){
+    // INLINE MODE: no <p>, keep it on one line with the choice key.
+    // Collapse multiple newlines, turn single newlines into spaces.
+    h = h.replace(/\n{2,}/g, '\n').replace(/\n/g, ' ');
+    h = unmaskLists(h); // (lists in choices are rare; still safe)
+    return h.trim();
+  }
 
-    // IMPORTANT: do NOT collapse newlines here — CSS pre-wrap will render them.
+  // BLOCK MODE (stems): split paragraphs; single \n => <br>
+  h = h.split(/\n{2,}/).map(block => {
+    const trimmed = block.trim();
+    if (!trimmed) return '';
+    return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`;
+  }).join('');
 
-    return unmaskLists(h).trim();
+  h = unmaskLists(h)
+       .replace(/<p>\s*(<(?:ul|ol)\b[^>]*>)/g, '$1')
+       .replace(/(<\/(?:ul|ol)>)\s*<\/p>/g, '$1');
+
+  return h.trim();
 }
+
+
 
 
 
@@ -451,7 +469,7 @@ function unmaskLists(h){
         if (isMath) {
           txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
         } else {
-          txtSpan.innerHTML   = proseToHTML(rawText); // prose -> HTML
+          txtSpan.innerHTML = proseToHTML(rawText, { inline: true }); // NEW
         }
 
         btn.replaceChildren(keySpan, txtSpan);
