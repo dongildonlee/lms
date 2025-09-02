@@ -1,18 +1,54 @@
-%% tags: [KSAT - English, KSAT - English 2025]
-%% type: mcq
+% =================================================================
+% KSAT English 2025 — Shared Passage + Q43–45 (Bundle)
+% Standalone, copy-paste ready. Compile with XeTeX/Tectonic.
+% =================================================================
+\documentclass[12pt]{article}
 
-\documentclass{article}
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
 \usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\usepackage{fontspec}
+\usepackage{xeCJK} % Korean text support
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{breakable,raster}
+\tcbset{colback=white,colframe=black!60,sharp corners,boxsep=4pt}
 
-% no-op markers for the importer
+% ----- Fonts (robust fallbacks so it compiles even if Noto isn't installed)
+\newcommand{\setupCJK}{%
+  \IfFontExistsTF{Noto Serif CJK KR}{%
+    \setmainfont{Noto Serif}%
+    \setCJKmainfont{Noto Serif CJK KR}%
+  }{%
+    \IfFontExistsTF{Apple SD Gothic Neo}{%
+      \setmainfont{Times New Roman}%
+      \setCJKmainfont{Apple SD Gothic Neo}%
+    }{%
+      \IfFontExistsTF{Malgun Gothic}{%
+        \setmainfont{Times New Roman}%
+        \setCJKmainfont{Malgun Gothic}%
+      }{%
+        \setmainfont{Latin Modern Roman}%
+      }%
+    }%
+  }%
+}
+\setupCJK
+
+% ----- Nice spacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+% ----- Importer no-ops (safe for standalone compile)
 \newenvironment{asset}[1]{}{}
 \newcommand{\uses}[1]{}
+\newcommand{\answer}[1]{} % <-- makes \answer harmless for LaTeX
 
 \begin{document}
 
-\begin{enumerate}
+% =======================
+% Items 18–42
+% =======================
+\begin{enumerate}[label=\textbf{\arabic*.},leftmargin=1.4em]
+\setcounter{enumi}{17} % so the next \item is 18
 
 % 18
 \item 다음 글의 목적으로 가장 적절한 것은? \answer{A}
@@ -24,7 +60,7 @@ We are really grateful to all of you who have signed up for the 10th Rosydale Ci
 Sincerely,
 Martha Kingsley, Race Manager
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item 마라톤 경기 취소 사실을 공지하려고
   \item 마라톤 경기 사전 행사 참여를 독려하려고
   \item 마라톤 경기 참가비 환불 절차를 설명하려고
@@ -37,7 +73,7 @@ Martha Kingsley, Race Manager
 
 It was Valentine's Day on Friday and Peter was certain that his wife, Amy, was going to love his surprise. Peter had spent a long time searching online for an event that would be a new way to spend time with Amy. He had finally found the perfect thing for her. She often told him that she liked to go to places she had never visited before, and he was absolutely sure that she would love going to the new, five-star restaurant downtown. He smiled as he called the restaurant and asked for a reservation for Friday. Unfortunately, his smile quickly disappeared when he was told that the restaurant was fully reserved. "That's too bad," he said quietly. "I thought that I had found the right place."
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item relaxed $\to$ indifferent
   \item confident $\to$ disappointed
   \item confused $\to$ satisfied
@@ -50,7 +86,7 @@ It was Valentine's Day on Friday and Peter was certain that his wife, Amy, was g
 
 We almost universally accept that playing video games is at best a pleasant break from a student’s learning and more often what prevents a student from accomplishing their goals. Games catch and hold attention in a way that few things can. And yet once they have our focus, they rarely seem to offer anything meaningful to help students grow in their lives outside the games. While this may be true for many games, we are too easily ignoring a valuable tool that could be used to enhance productivity instead of derailing it. Rather, it is desirable that we develop games that connect to the learning outcomes we want for our students. This will enable educators to take advantage of games’ attention commanding capacities and allow our students to enjoy their games while learning.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item 학습 효과 증진에 활용될 수 있는 게임을 개발해야 한다.
   \item 교육 현장에서 학습과 게임 활동을 적절하게 분배해야 한다.
   \item 학습 활동에 게임이 초래하는 집중력 저하를 경계해야 한다.
@@ -63,7 +99,7 @@ We almost universally accept that playing video games is at best a pleasant brea
 
 The passage explains Vitruvius’ view that architecture requires both practical and theoretical knowledge; relying only on theories and scholarship is like "hunting the shadow, not the substance."
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item seeking abstract knowledge emphasized by architectural tradition
   \item discounting the subjects necessary to achieve architectural goals
   \item pursuing the ideals of architecture without the practical skills
@@ -76,7 +112,7 @@ The passage explains Vitruvius’ view that architecture requires both practical
 
 The ability to understand emotions — to have a diverse emotion vocabulary and to understand the causes and consequences of emotion — is particularly relevant in group settings. Individuals skilled in this domain can express emotions accurately, facilitating clear communication and cooperation, appreciate others’ perspectives, and promote constructive conflict resolution and improved group functioning.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item 집단 구성원 간 갈등 해소를 위해 감정 조절이 중요하다.
   \item 감정 이해 능력은 집단 내 원활한 소통과 협력을 촉진한다.
   \item 타인에 대한 공감 능력은 자신의 감정 표현 능력을 향상한다.
@@ -89,7 +125,7 @@ The ability to understand emotions — to have a diverse emotion vocabulary and 
 
 The Industrial Age changed the relationship among time, labor, and capital: around-the-clock factory shifts tied wages to effort and production and reorganized society around new principles of productivity.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item shift in the work-time paradigm brought about by industrialization
   \item effects of standardizing production procedures on labor markets
   \item influence of industrialization on the machine-human relationship
@@ -102,7 +138,7 @@ The Industrial Age changed the relationship among time, labor, and capital: arou
 
 The selfie extends the history of the self-portrait, becoming a key visual signature of the networked era by enabling more people to depict themselves and express the drama of daily self-presentation.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item Are Selfies Just a Temporary Trend in Art History?
   \item Fantasy or Reality: Your Selfie Is Not the Real You
   \item The Selfie: A Symbol of Self-oriented Global Culture
@@ -113,7 +149,7 @@ The selfie extends the history of the self-portrait, becoming a key visual signa
 % 25
 \item 다음 도표의 내용과 일치하지 않는 것은? \answer{A} % adjust key if needed after real chart
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item For each year, producers had the highest percentage among the four roles.
   \item Directors’ percentage in 2021 was lower than 2020 but higher than 2022.
   \item Writers increased by 4pp from 2020 to 2021 and by 1pp from 2021 to 2022.
@@ -124,7 +160,7 @@ The selfie extends the history of the self-portrait, becoming a key visual signa
 % 26
 \item Dick Enberg에 관한 다음 글의 내용과 일치하지 않는 것은? \answer{A} % placeholder key
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item Michigan에서 태어났다.
   \item 대학 야구팀 코치였다.
   \item 중국을 방문한 첫 미국인 스포츠 캐스터였다.
@@ -135,7 +171,7 @@ The selfie extends the history of the self-portrait, becoming a key visual signa
 % 27
 \item Adenville City Pass Card에 관한 다음 안내문의 내용과 일치하지 않는 것은? \answer{C}
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item 관광객을 위한 대중교통 카드이다.
   \item 시티 투어 버스에는 사용할 수 없다.
   \item 5일 패스 카드에만 주요 관광지 입장료 할인 혜택이 제공된다.
@@ -146,12 +182,12 @@ The selfie extends the history of the self-portrait, becoming a key visual signa
 % 28
 \item Luckwood Snow Festival에 관한 다음 안내문의 내용과 일치하는 것은? \answer{C}
 
-Festival Info  
-15th annual Luckwood Snow Festival. Dates: Jan 24–30 (7 days), 9 a.m.–8 p.m. Venue: Luckwood Park.  
-Special Activities: Snow Sculpture Contest (11 teams); Kids’ tunnels and slides.  
+Festival Info \\
+15th annual Luckwood Snow Festival. Dates: Jan 24–30 (7 days), 9 a.m.–8 p.m. Venue: Luckwood Park. \\
+Special Activities: Snow Sculpture Contest (11 teams); Kids’ tunnels and slides. \\
 Transportation: No parking (use public transit/shuttle). Shuttle runs between Luckwood Subway Station and Luckwood Park (one-way fare: $1, cash only).
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item 2년에 한 번 열린다.
   \item 열흘 동안 진행된다.
   \item 눈 조각 경연에는 11개 팀이 참가할 것이다.
@@ -164,7 +200,7 @@ Transportation: No parking (use public transit/shuttle). Shuttle runs between Lu
 
 Think of yourself. When you decide to get up and get a drink of water, for example, you don’t consciously organize or consider the host of steps involved. Imagine if we \underline{had to} consider every single muscle that needed to be contracted or relaxed just to stand up and walk. It would be tiresome and very slow — as patients recovering from a brain injury affecting the motor system \underline{knows}. The autopilot parts of our brain do it for us automatically, \underline{freeing up} our conscious mind for more important jobs. It is the older parts of our brain \underline{that support these automatic processes that allow} us to move, hear, see, and use many of our social skills. More recently evolved abilities like talking, reading, and writing are far less automated. So, most of the time, \underline{what you are perceiving, feeling, or thinking is} based on a very crude and fast analysis that happens completely without your awareness.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item ① had to
   \item ② knows
   \item ③ freeing up
@@ -177,7 +213,7 @@ Think of yourself. When you decide to get up and get a drink of water, for examp
 
 Studies in psychology have reported cases in which competitive incentives resulted in lower task effort, and their focus was on the psychological underpinnings of the reduction in motivation. For example, competition presents an inevitable conflict between the motivation to achieve one’s personal goal and the \underline{desire} to maintain good relationships with others. When the maintenance of interpersonal relationships is important, competitors experience an \underline{internal} conflict that can harm their desire to achieve their goal and taint the good feeling brought about by winning. Exline and Lobel found that the perception of oneself as a target for upward social comparison often makes people \underline{uncomfortable}. When they believe that others are making envious comparisons with them, people feel uneasiness, distress, or sorrow. Feelings of guilt, an emotion generally associated with high motivation for goal-achievement, lead to \underline{stronger} motivation and performance in the pursuit of competitive goals. Consequences of this emotional state include lower task motivation in a competition and preferences for more cooperative and altruistic outcomes, such as \underline{diminishing} the significance of the outcome or sharing the winner’s reward.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item ① desire
   \item ② internal
   \item ③ uncomfortable
@@ -190,7 +226,7 @@ Studies in psychology have reported cases in which competitive incentives result
 
 Literature can be helpful in the language learning process because of the it fosters in readers. Core language teaching materials must concentrate on how a language operates both as a rule-based system and as a sociosemantic system. Very often, the process of learning is essentially analytic, piecemeal, and, at the level of the personality, fairly superficial. Engaging imaginatively with literature enables learners to shift the focus of their attention beyond the more mechanical aspects of the foreign language system. When a novel, play or short story is explored over a period of time, the result is that the reader begins to ‘inhabit’ the text. He or she is drawn into the book. Pinpointing what individual words or phrases may mean becomes less important than pursuing the development of the story. The reader is eager to find out what happens as events unfold; he or she feels close to certain characters and shares their emotional responses. The language becomes ‘transparent’ — the fiction draws the whole person into its own world.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item linguistic insight
   \item artistic imagination
   \item literary sensibility
@@ -203,7 +239,7 @@ Literature can be helpful in the language learning process because of the it fos
 
 Education, at its best, teaches more than just knowledge. It teaches critical thinking: the ability to stop and think before acting, to avoid succumbing to emotional pressures. This is not thought control. It is the very reverse: mental liberation. Even the most advanced intellectual will be imperfect at this skill. But even imperfect possession of it \underline{\hspace{1.5em}} of being ‘stimulus-driven’, constantly reacting to the immediate environment, the brightest colours or loudest sounds. Being driven by heuristic responses, living by instinct and emotion all the time, is a very easy way to live, in many ways: thought is effortful, especially for the inexperienced. But emotions are also exhausting, and short-term reactions may not, in the long term, be the most beneficial for health and survival. Just as we reach for burgers for the sake of convenience, storing up the arterial fat which may one day kill us, so our reliance on feelings can do us great harm.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item intensifies people’s danger
   \item enhances our understanding
   \item frees a person from the burden
@@ -216,7 +252,7 @@ Education, at its best, teaches more than just knowledge. It teaches critical th
 
 We are famously living in the era of the attention economy, where the largest and most profitable businesses in the world are those that consume my attention. The advertising industry is literally dedicated to capturing the conscious hours of my life and selling them to someone else. It might seem magical that so many exciting and useful software systems are available to use for free, but it is now conventional wisdom that if you can’t see who is paying for something that appears to be free, then \underline{\hspace{5em}}.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item all of your attention has already been spent
   \item the real product being sold is you
   \item your privacy is being violated
@@ -229,7 +265,7 @@ We are famously living in the era of the attention economy, where the largest an
 
 Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball don’t just regulate the behavior of the players; they determine the behavior that constitutes playing the game. … Without them an individual would not have the opportunity to occupy the role.
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item categorize one’s patterns of conduct in legal and productive ways
   \item lead people to reevaluate their roles and practices in a society
   \item encourage new ways of thinking which promote creative ideas
@@ -241,7 +277,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 \item \textit{다음 글에서 전체 흐름과 관계 없는 문장은?} \answer{D}
 
 (The expansion of sports tourism …)  
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item ① The significance of the car … has had no less an impact on sports tourism specifically.
   \item ② 1920s in the USA … later in Britain.
   \item ③ access to many areas not served by public transport …
@@ -254,7 +290,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 
 (지문 요약: 농지 임대에서 평판이 시장 집행을 가능케 함)
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item (C) → (B) → (A)
   \item (B) → (C) → (A)
   \item (A) → (B) → (C)
@@ -267,7 +303,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 
 (지문 요약: 원형 배열 새들이 선형 배열보다 감정 전염/스캐닝이 더 조정됨)
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item (B) → (C) → (A)
   \item (C) → (B) → (A)
   \item (A) → (B) → (C)
@@ -280,7 +316,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 
 주어진 문장: \emph{“Without any special legal protection for trade secrets, however, the secretive inventor risks that an employee or contractor will disclose the proprietary information.”}
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item ①
   \item ②
   \item ③
@@ -293,7 +329,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 
 주어진 문장: \emph{“In reality, objects do not conform to a linear lifecycle model; instead, they undergo breakdowns, await repairs, are stored away, or are repurposed later.”}
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item ①
   \item ②
   \item ③
@@ -304,7 +340,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 % 40
 \item \textit{다음 글을 한 문장으로 요약하고, 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?} \answer{A}
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item (A) controllability \quad (B) challenge
   \item (A) predictability \quad (B) support
   \item (A) manageability \quad (B) reverse
@@ -315,7 +351,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 % 41
 \item \textit{윗글의 제목으로 가장 적절한 것은?} \answer{B}
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item Anatomical Distance Between Humans and Other Primates
   \item Human Hands: A Decisive Leap in the Evolutionary Path
   \item Our Hands: An Unexpected Outcome of Evolution
@@ -326,7 +362,7 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
 % 42
 \item \textit{밑줄 친 (a)～(e) 중에서 문맥상 낱말의 쓰임이 적절하지 않은 것은?} \answer{E}
 
-\begin{enumerate}
+\begin{enumerate}[label=(\Alph*)]
   \item (a)
   \item (b)
   \item (c)
@@ -334,43 +370,122 @@ Centralized, formal rules can \underline{\hspace{6em}}. The rules of baseball do
   \item (e)
 \end{enumerate}
 
-% 43
-\item \textit{주어진 글 (A)에 이어질 내용을 순서에 맞게 배열한 것으로 가장 적절한 것은?} \answer{E}
+\end{enumerate} % <-- close 18–42
 
-\begin{enumerate}
-  \item (B) → (C) → (D)
-  \item (D) → (C) → (B)
-  \item (C) → (B) → (D)
-  \item (D) → (B) → (C)
-  \item (C) → (D) → (B)
-\end{enumerate}
+% ================================================================
+% ========== Shared passage for Q43–Q45 (appears once) ==========
+% ================================================================
+\begin{asset}{passage-43-45}
+  \begin{tcolorbox}[title=\large Reading Passage (shared for Q43–Q45),breakable]
+    \begin{tcbraster}[raster columns=2,raster equal height=rows,raster column skip=8pt]
+      % ---- (A)
+      \begin{tcolorbox}[title=\large (A),breakable]
+        “Do you remember when Sean used to tell me that I was the
+        best dad in the world?” Ethan asked his wife, Grace. “Yes, I
+        do. I always envied your relationship with Sean,” she replied.
+        Ethan then shared how things had changed since (a) his son
+        started middle school. Grace had noticed Ethan often pushing
+        Sean to study harder. “Maybe he isn’t that into school right
+        now. How about going hiking, just the two of you?” she
+        suggested. He agreed, and realizing that both his and Sean’s
+        hiking jackets were still at the laundry, he asked his wife to go
+        and pick them up with him.
+      \end{tcolorbox}
+      % ---- (B)
+      \begin{tcolorbox}[title=\large (B),breakable]
+        Ethan and Grace came back home with the jackets and
+        checked if Sean had everything else he needed for hiking.
+        Luckily, in his drawers they found his hat, shoes, sunglasses,
+        and hiking sticks. When Sean returned from school, Ethan
+        softly said, “Sean, let’s go hiking this Saturday, just the two
+        of us.” Though Sean thanked (b) him for the suggestion, he
+        said he had to go to the library. Grace stepped in, “You know,
+        the weather this weekend will be the best of the year. Why not
+        enjoy it?” After a moment’s hesitation, (c) he agreed.
+      \end{tcolorbox}
+      % ---- (C)
+      \begin{tcolorbox}[title=\large (C),breakable]
+        “When did you bring the jackets in?” the clerk at the
+        laundry asked. “Maybe two weeks ago,” Ethan replied. Then,
+        Grace quickly reminded (d) him, “Honey, we actually left
+        them here a month ago.” The clerk went into the storage area
+        to look for the clothes. Finally, he returned with the jackets
+        and handed them to Ethan. The clerk politely said, “I am
+        sorry, but please collect your items earlier next time. Our
+        storage is too full.” Ethan felt embarrassed for the late
+        collection and apologized.
+      \end{tcolorbox}
+      % ---- (D)
+      \begin{tcolorbox}[title=\large (D),breakable]
+        The weather was perfect. Ethan and Sean set off hiking
+        along the valley by Aicken Mountain. They walked in silence
+        until Sean fell over a rock and twisted his ankle. Realizing he
+        couldn’t walk, Ethan carried his son down on his back. He
+        felt Sean’s heartbeat, something he hadn’t felt since Sean was
+        a baby. Suddenly, Sean said, “Dad, I’m sorry. At some point,
+        I started to become afraid of disappointing (e) you. But you
+        are still the best dad.” Energized, he felt no weight on his
+        back and replied, “You are the best son, no matter what.”
+      \end{tcolorbox}
+    \end{tcbraster}
+  \end{tcolorbox}
+\end{asset}
 
-% 44
-\item \textit{밑줄 친 (a)～(e) 중에서 가리키는 대상이 나머지 넷과 다른 것은?} \answer{C}
+% ================================================================
+% ========== Q43–45 (force MCQ + bundle sequencing) =============
+% ================================================================
+\begin{enumerate}[label=\textbf{\arabic*.},leftmargin=1.4em]
+\setcounter{enumi}{42} % so the first item is 43
 
-\begin{enumerate}
-  \item (a)
-  \item (b)
-  \item (c)
-  \item (d)
-  \item (e)
-\end{enumerate}
+% --- Q43 --------------------------------------------------------
+%% tags: [KSAT - English, KSAT - English 2025]
+%% type: mcq
+%% diag: ["bundle:KSAT-2025-43-45","bundle_index:1","reading:shared-passage"]
+\item \uses{passage-43-45}
+  주어진 글 (A)에 이어질 내용을 순서에 맞게 배열한 것으로 가장 적절한 것은?
+  \begin{enumerate}[label=(\Alph*),itemsep=2pt,topsep=2pt]
+    \item 선택지 A
+    \item 선택지 B
+    \item 선택지 C
+    \item 선택지 D
+    \item 선택지 E
+  \end{enumerate}
+% \answer{C}
 
-% 45
-\item \textit{윗글에 관한 내용으로 적절하지 않은 것은?} \answer{D}
+% --- Q44 --------------------------------------------------------
+%% tags: [KSAT - English, KSAT - English 2025]
+%% type: mcq
+%% diag: ["bundle:KSAT-2025-43-45","bundle_index:2","reading:shared-passage"]
+\item \uses{passage-43-45}
+  밑줄 친 (a)～(e) 중에서 가리키는 대상이 나머지 넷과 다른 것은?
+  \begin{enumerate}[label=(\Alph*),itemsep=2pt,topsep=2pt]
+    \item 선택지 A
+    \item 선택지 B
+    \item 선택지 C
+    \item 선택지 D
+    \item 선택지 E
+  \end{enumerate}
+% \answer{B}
 
-\begin{enumerate}
-  \item Grace는 Ethan과 Sean의 관계를 부러워했다고 말했다.
-  \item Grace는 Ethan에게 Sean과 둘이서 하이킹할 것을 권했다.
-  \item Sean의 선글라스가 서랍장 안에 있었다.
-  \item Ethan은 혼자서 세탁소에 하이킹 재킷을 찾으러 갔다.
-  \item Sean은 하이킹하는 도중 돌에 걸려 넘어졌다.
-\end{enumerate}
-
+% --- Q45 --------------------------------------------------------
+%% tags: [KSAT - English, KSAT - English 2025]
+%% type: mcq
+%% diag: ["bundle:KSAT-2025-43-45","bundle_index:3","reading:shared-passage"]
+\item \uses{passage-43-45}
+  윗글에 관한 내용으로 적절하지 않은 것은?
+  \begin{enumerate}[label=(\Alph*),itemsep=2pt,topsep=2pt]
+    \item 선택지 A
+    \item 선택지 B
+    \item 선택지 C
+    \item 선택지 D
+    \item 선택지 E
+  \end{enumerate}
+% \answer{E}
 
 \end{enumerate}
 
 \end{document}
+
 
 
 

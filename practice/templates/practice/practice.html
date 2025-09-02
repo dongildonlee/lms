@@ -40,10 +40,26 @@
     background:#fff;
   }
   .choice-key{ font-weight:600; margin-right:.5rem; }
+
+  /* Shared passage frame */
+  #shared-asset{
+    border:1px solid #e5e7eb;
+    border-radius: .75rem;
+    background: #ffffff;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  #shared-asset .muted{
+    color:#64748b; /* slate-500 */
+    font-size:.95rem;
+  }
 </style>
 
 <div id="qCard" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 hidden">
-  <div id="stem" class="text-lg mb-4 whitespace-pre-wrqp leading-7"></div>
+  <!-- Shared article/passage stays mounted here (updates only when asset key changes) -->
+  <div id="shared-asset"></div>
+
+  <div id="stem" class="text-lg mb-4 whitespace-pre-wrap leading-7"></div>
   <div id="choices" class="space-y-2"></div>
   <div id="feedback" class="mt-4 font-semibold"></div>
 
@@ -72,65 +88,63 @@
   const $ = (sel) => document.querySelector(sel);
   let attemptId = null;
   let currentQ  = null;
-  let qOffset   = 0;   // which question to fetch next
+  let qOffset   = 0;   // legacy offset; still used for non-bundle cases
   let qTotal    = 0;   // total questions for the current tag
   let renderToken = 0; // cancels stale async writes
+  let currentAsset = null; // NEW: tracks shared passage/article key
+  window._lastQid = null;  // last served question id, for bundle follow-up
 
   let viewTimer = { start: 0, acc: 0, running: false };
   let seenIds = new Set();   // track seen question IDs this session
 
-
-function vtReset(){ viewTimer = { start: 0, acc: 0, running: false }; }
-function vtStart(){
-  if (!viewTimer.running){
-    viewTimer.start = performance.now();
-    viewTimer.running = true;
+  // ---------------- View-time logging ----------------
+  function vtReset(){ viewTimer = { start: 0, acc: 0, running: false }; }
+  function vtStart(){
+    if (!viewTimer.running){
+      viewTimer.start = performance.now();
+      viewTimer.running = true;
+    }
   }
-}
-function vtPause(){
-  if (viewTimer.running){
-    viewTimer.acc += performance.now() - viewTimer.start;
-    viewTimer.running = false;
+  function vtPause(){
+    if (viewTimer.running){
+      viewTimer.acc += performance.now() - viewTimer.start;
+      viewTimer.running = false;
+    }
   }
-}
-function vtMs(){
-  return Math.round(viewTimer.acc + (viewTimer.running ? (performance.now() - viewTimer.start) : 0));
-}
+  function vtMs(){
+    return Math.round(viewTimer.acc + (viewTimer.running ? (performance.now() - viewTimer.start) : 0));
+  }
 
-async function logViewIfAny(){
-  try{
-    vtPause();
-    const ms = vtMs();
-    console.log('[logViewIfAny]', { attemptId, qid: currentQ?.id, ms });  // <-- add this line
-    if (!attemptId || !currentQ || ms <= 0) return;
-    await api(`/api/attempts/${attemptId}/views/`, {
-      method: 'POST',
-      body: JSON.stringify({ question_id: currentQ.id, view_ms: ms })
-    });
-  }catch(e){ console.warn('view log failed', e); }
-}
+  async function logViewIfAny(){
+    try{
+      vtPause();
+      const ms = vtMs();
+      if (!attemptId || !currentQ || ms <= 0) return;
+      await api(`/api/attempts/${attemptId}/views/`, {
+        method: 'POST',
+        body: JSON.stringify({ question_id: currentQ.id, view_ms: ms })
+      });
+    }catch(e){ console.warn('view log failed', e); }
+  }
 
+  // pause/resume on visibility changes
+  document.addEventListener('visibilitychange', () => (document.hidden ? vtPause() : vtStart()));
+  window.addEventListener('blur', vtPause);
+  window.addEventListener('focus', vtStart);
 
-// pause/resume on visibility changes
-document.addEventListener('visibilitychange', () => (document.hidden ? vtPause() : vtStart()));
-window.addEventListener('blur', vtPause);
-window.addEventListener('focus', vtStart);
+  // best-effort log on unload
+  window.addEventListener('pagehide', () => {
+    try{
+      vtPause();
+      const ms = vtMs();
+      if (!attemptId || !currentQ || ms <= 0) return;
+      const url = `/api/attempts/${attemptId}/views/`;
+      const blob = new Blob([JSON.stringify({question_id: currentQ.id, view_ms: ms})], {type: 'application/json'});
+      if (navigator.sendBeacon) navigator.sendBeacon(url, blob);
+    }catch(_){}
+  });
 
-// best-effort log on unload
-window.addEventListener('pagehide', () => {
-  try{
-    vtPause();
-    const ms = vtMs();
-    if (!attemptId || !currentQ || ms <= 0) return;
-    const url = `/api/attempts/${attemptId}/views/`;
-    const blob = new Blob([JSON.stringify({question_id: currentQ.id, view_ms: ms})], {type: 'application/json'});
-    if (navigator.sendBeacon) navigator.sendBeacon(url, blob);
-  }catch(_){}
-});
-
-
-
-  // --- CSRF ---
+  // ---------------- CSRF ----------------
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -138,7 +152,7 @@ window.addEventListener('pagehide', () => {
   }
   const csrftoken = getCookie('csrftoken') || '';
 
-  // === helpers ===============================================================
+  // ---------------- Helpers ----------------
   const HEAVY_ENV = '(tikzpicture|tabular|array|align\\*?|tcolorbox|axis)';
   const HEAVY_RE  = new RegExp('\\\\begin\\{'+HEAVY_ENV+'\\}[\\s\\S]*?\\\\end\\{\\1\\}');
 
@@ -168,119 +182,78 @@ window.addEventListener('pagehide', () => {
 
   function escapeHTML(x){ return (x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  // NEW: make LaTeX lists render as HTML lists
+  // Make LaTeX lists render as HTML lists
   function maskLatexLists(s){
-  if (!s) return s;
-  // keep original newlines (don’t normalize yet)
-  s = s.replace(/\r\n?/g, '\n')
-       .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
-       .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
-       .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
-       .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]');
-
-  // \item with optional [label]; preserve the label (e.g. I., II., III.)
-  s = s.replace(/\\item(?:\s*\[([^\]]+)\])?\s*/g, (_m, label) =>
-    label ? `[[LI:${label}]]` : '[[LI]]'
-  );
-  return s;
-}
-
-function unmaskLists(h){
-  if (!h) return h;
-  h = h.replace(/\[\[UL_OPEN\]\]/g, '<ul class="list-disc ml-6">')
-       .replace(/\[\[OL_OPEN\]\]/g, '<ol class="list-decimal ml-6">')
-       .replace(/\[\[UL_CLOSE\]\]/g, '[[/UL]]')
-       .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]')
-       .replace(/\[\[LI:([^\]]+)\]\]/g, '</li><li class="has-label"><span class="li-label">$1</span> ')
-       .replace(/\[\[LI\]\]/g, '</li><li>');
-
-  // fix the first <li> after opening the list
-  h = h.replace(/<(ul|ol)([^>]*)>\s*<\/li><li>/g, '<$1$2><li>');
-
-  // close lists
-  h = h.replace(/\[\[\/UL\]\]/g, '</li></ul>')
-       .replace(/\[\[\/OL\]\]/g, '</li></ol>');
-  return h;
-}
-
-
-  // Collapse cases where inline math sits on its own line:
-  //   "\n $C$ \n"  → " $C$ "
-  //   "\n \(C\) \n" → " \(C\) "
-  function squishSoloInlineMath(s){
-    if(!s) return s;
-    // $...$
-    s = s.replace(/\n\s*\$([^\$\n]{1,64})\$\s*\n/g, ' $$1$ ');
-    // \(...\)
-    s = s.replace(/\n\s*\\\(([^\)\n]{1,64})\\\)\s*\n/g, ' \\($1\\) ');
+    if (!s) return s;
+    s = s.replace(/\r\n?/g, '\n')
+         .replace(/\\begin\{itemize\}/g,   '[[UL_OPEN]]')
+         .replace(/\\end\{itemize\}/g,     '[[UL_CLOSE]]')
+         .replace(/\\begin\{enumerate\}/g, '[[OL_OPEN]]')
+         .replace(/\\end\{enumerate\}/g,   '[[OL_CLOSE]]');
+    s = s.replace(/\\item(?:\s*\[([^\]]+)\])?\s*/g, (_m, label) =>
+      label ? `[[LI:${label}]]` : '[[LI]]'
+    );
     return s;
   }
-
-  // Convert inline $...$ → \(...\); preserve display $$...$$ as \[...\]
-  function convertInlineDollarMath(s){
-    if(!s) return s;
-    const displays = [];
-    // stash $$...$$ blocks
-    s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, c) => {
-      const i = displays.push(c) - 1;
-      return `[[MJXDISPLAY${i}]]`;
-    });
-    // convert single-dollar pairs to \(...\)
-    s = s.replace(/(^|[^$])\$([^\n$]+?)\$(?!\$)/g, (m, pre, c) => `${pre}\\(${c}\\)`);
-    // restore display as \[...\]
-    s = s.replace(/\[\[MJXDISPLAY(\d+)\]\]/g, (_, i) => `\\[${displays[+i]}\\]`);
-    return s;
+  function unmaskLists(h){
+    if (!h) return h;
+    h = h.replace(/\[\[UL_OPEN\]\]/g, '<ul class="list-disc ml-6">')
+         .replace(/\[\[OL_OPEN\]\]/g, '<ol class="list-decimal ml-6">')
+         .replace(/\[\[UL_CLOSE\]\]/g, '[[/UL]]')
+         .replace(/\[\[OL_CLOSE\]\]/g, '[[/OL]]')
+         .replace(/\[\[LI:([^\]]+)\]\]/g, '</li><li class="has-label"><span class="li-label">$1</span> ')
+         .replace(/\[\[LI\]\]/g, '</li><li>');
+    h = h.replace(/<(ul|ol)([^>]*)>\s*<\/li><li>/g, '<$1$2><li>');
+    h = h.replace(/\[\[\/UL\]\]/g, '</li></ul>')
+         .replace(/\[\[\/OL\]\]/g, '</li></ol>');
+    return h;
   }
 
+  // Convert prose (with light TeX) to HTML
   function proseToHTML(s, opts = {}){
-  const inline = !!opts.inline;     // <-- NEW: inline mode for choices
-  if (s == null) return '';
+    const inline = !!opts.inline;
+    if (s == null) return '';
 
-  // keep author’s line breaks; treat TeX \\ as a newline
-  s = s.replace(/\r\n?/g, '\n');
-  s = s.replace(/\\\\\s*/g, '\n');
+    // keep author’s line breaks; treat TeX \\ as a newline
+    s = s.replace(/\r\n?/g, '\n');
+    s = s.replace(/\\\\\s*/g, '\n');
 
-  // capture lists before HTML escaping
-  s = maskLatexLists(s);
+    // capture lists before HTML escaping
+    s = maskLatexLists(s);
 
-  let h = escapeHTML(s);
+    let h = escapeHTML(s);
 
-  // simple TeX text escapes/styles
-  h = h.replace(/\\%/g, '%')
-       .replace(/\\&/g, '&')
-       .replace(/\\_/g, '_')
-       .replace(/\\#/g, '#')
-       .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
-       .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
-       .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
-       .replace(/\\underline\{([^}]*)\}/g, '<u>$1</u>')
-       .replace(/\\hfill/g, ''); // no-op on web
+    // simple TeX text escapes/styles
+    h = h.replace(/\\%/g, '%')
+         .replace(/\\&/g, '&')
+         .replace(/\\_/g, '_')
+         .replace(/\\#/g, '#')
+         .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
+         .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
+         .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
+         .replace(/\\underline\{([^}]*)\}/g, '<u>$1</u>')
+         .replace(/\\hfill/g, ''); // no-op on web
 
-  if (inline){
-    // INLINE MODE: no <p>, keep it on one line with the choice key.
-    // Collapse multiple newlines, turn single newlines into spaces.
-    h = h.replace(/\n{2,}/g, '\n').replace(/\n/g, ' ');
-    h = unmaskLists(h); // (lists in choices are rare; still safe)
+    if (inline){
+      // inline mode for choices
+      h = h.replace(/\n{2,}/g, '\n').replace(/\n/g, ' ');
+      h = unmaskLists(h);
+      return h.trim();
+    }
+
+    // block mode (stems)
+    h = h.split(/\n{2,}/).map(block => {
+      const trimmed = block.trim();
+      if (!trimmed) return '';
+      return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`;
+    }).join('');
+
+    h = unmaskLists(h)
+         .replace(/<p>\s*(<(?:ul|ol)\b[^>]*>)/g, '$1')
+         .replace(/(<\/(?:ul|ol)>)\s*<\/p>/g, '$1');
+
     return h.trim();
   }
-
-  // BLOCK MODE (stems): split paragraphs; single \n => <br>
-  h = h.split(/\n{2,}/).map(block => {
-    const trimmed = block.trim();
-    if (!trimmed) return '';
-    return `<p>${trimmed.replace(/\n/g, '<br>')}</p>`;
-  }).join('');
-
-  h = unmaskLists(h)
-       .replace(/<p>\s*(<(?:ul|ol)\b[^>]*>)/g, '$1')
-       .replace(/(<\/(?:ul|ol)>)\s*<\/p>/g, '$1');
-
-  return h.trim();
-}
-
-
-
-
 
   function normalizeTex(s){
     if(!s) return '';
@@ -290,7 +263,7 @@ function unmaskLists(h){
             .trim();
   }
 
-  // Wrap bare math for MathJax (don’t touch text that’s already wrapped)
+  // Wrap bare math for MathJax (don’t touch if already wrapped)
   function wrapInlineMathIfNeeded(s){
     if (!s) return s;
     const alreadyWrapped =
@@ -298,7 +271,7 @@ function unmaskLists(h){
     if (alreadyWrapped) return s;
     const looksMath = /\\[a-zA-Z]+|[_^]|\\sqrt|\\frac|\\cdot|\\times|\\sum|\\int/.test(s);
     if (!looksMath) return s;
-    return `\\(${s.replace(/%/g, '\\%')}\\)`; // escape % to avoid TeX comments
+    return `\\(${s.replace(/%/g, '\\%')}\\)`;
   }
 
   async function fetchPdfBlobUrl(tex){
@@ -316,7 +289,7 @@ function unmaskLists(h){
     return URL.createObjectURL(blob);
   }
 
-  // ---- MathJax: manual typeset (deterministic) ------------------------------
+  // MathJax manual typeset (deterministic)
   async function ensureMathJaxReady() {
     if (window.MathJax?.typesetPromise) return;
     await new Promise(resolve => {
@@ -334,7 +307,6 @@ function unmaskLists(h){
     }
   }
 
-  // ---- API ------------------------------------------------------------------
   async function api(url, opts={}){
     const o = Object.assign({ headers:{} }, opts);
     if (!o.headers['Content-Type'] && o.body) o.headers['Content-Type']='application/json';
@@ -344,7 +316,26 @@ function unmaskLists(h){
     return r.json();
   }
 
-  // ---- Flow -----------------------------------------------------------------
+  // --------------- Shared passage helpers ---------------
+  // If backend includes q.assets like ["passage-43-45"], use that; else parse from stem "\uses{passage-...}"
+  function extractAssetKeyFromStem(stem) {
+    const m = /\\uses\{([^}]+)\}/.exec(stem || "");
+    return m ? m[1] : null;
+  }
+
+  async function renderSharedAsset(key) {
+    // If you expose an endpoint like /api/assets/<key>?format=html, fetch it here:
+    try {
+      const res = await fetch(`/api/assets/${encodeURIComponent(key)}?format=html`, { headers: { 'Accept': 'text/html' }});
+      if (res.ok) {
+        return await res.text(); // trusted HTML from your server
+      }
+    } catch (_) {}
+    // Fallback placeholder (keeps layout stable if endpoint not yet implemented)
+    return `<div class="muted">Shared Passage: <code>${key}</code> (asset endpoint not configured)</div>`;
+  }
+
+  // --------------- Flow ---------------
   async function startPractice(){
     try{
       const data = await api('/api/attempts/', {
@@ -352,153 +343,182 @@ function unmaskLists(h){
         body: JSON.stringify({ assignment_title:'Practice' })
       });
       attemptId = data.attempt_id;
-      await loadQuestion();
+      await loadQuestion();  // first question (no bundle follow-up)
     }catch(e){
       $('#status').textContent = `Failed to start: ${e.message}`;
     }
   }
-  async function loadQuestion(){
-  const token = ++renderToken;            // token for this render
 
-  // clear previous UI
-  $('#stem').innerHTML = '';
-  $('#choices').innerHTML = '';
-  $('#feedback').textContent = '';
+  // Load a question; if bundleFollowupFor is provided, backend will return the next in the bundle
+  async function loadQuestion(bundleFollowupFor = null){
+    const token = ++renderToken;
 
-  $('#qCard')?.classList.remove('hidden');
-  $('#qCard').style.display='block';
-
-  try{
-    const tag = new URLSearchParams(location.search).get('tag') || '';
-    const exclude = Array.from(seenIds);
-    const url = `/api/questions/?limit=1&offset=${qOffset}&ordering=-id&_t=${Date.now()}`
-              + (tag ? `&tag=${encodeURIComponent(tag)}` : '')
-              + (exclude.length ? `&exclude=${encodeURIComponent(exclude.join(','))}` : '');
-
-    const qRes = await api(url);
-    if (token !== renderToken) return;
-
-    if (!qRes.count || !qRes.questions?.length) {
-      $('#stem').innerHTML = 'No unseen questions left for this filter.';
-      $('#choices').innerHTML = '';
-      $('#feedback').textContent = '';
-
-      // Optional: reset button so students can restart the pool
-      const btn = document.createElement('button');
-      btn.className = 'choice-btn';
-      btn.textContent = 'Restart session (allow repeats)';
-      btn.onclick = () => { seenIds.clear(); qOffset = 0; loadQuestion(); };
-      $('#choices').appendChild(btn);
-
-      await typeset();
-      return;
-    }
-
-    currentQ = qRes.questions[0];
-    seenIds.add(currentQ.id);   // NEW: avoid repeats
-    qTotal   = qRes.count || qTotal;
-    qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
-
-    // ---- STEM (heavy block → PDF) -----------------------------------------
-    const rawStem  = currentQ.stem_md || '';
-    const body     = stripDocBody(rawStem);
-    const parts    = extractFirstHeavyBlock(body);
-
-    if(parts){
-      const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
-      const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
-      const pdfUrl     = await fetchPdfBlobUrl(parts.block);
-      if (token !== renderToken) return;
-      $('#stem').innerHTML =
-        `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
-    }else{
-      if (token !== renderToken) return;
-      $('#stem').innerHTML = proseToHTML(body);
-    }
-
-    // ---- MathJax AFTER stem is in the DOM (Safari timing-safe) ------------
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    if (window.MathJax?.typesetClear) MathJax.typesetClear();
-    await typeset($('#stem'));
-    if (token !== renderToken) return;
-
-    // ---- CHOICES (fixed A–E order) ---------------------------------------
-    const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
-    const choices = currentQ.choices || {};
-
-    const preferred = ['A','B','C','D','E'];
-    let entries = preferred.filter(k => Object.prototype.hasOwnProperty.call(choices, k))
-                           .map(k => [k, choices[k]]);
-    if (entries.length === 0) {
-      entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
-    }
-
-    if (token !== renderToken) return;
-    for (const [key,label] of entries){
-      const cbody  = stripDocBody(label || '');
-      const cparts = extractFirstHeavyBlock(cbody);
-
-      const btn = document.createElement('button');
-      btn.className = 'choice-btn';
-
-      if(cparts){
-        const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
-        const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
-        const url    = await fetchPdfBlobUrl(cparts.block);
-        if (token !== renderToken) return;
-        btn.innerHTML =
-          `<span class="choice-key">${key})</span>${before}` +
-          `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
-          `${after}`;
-      } else {
-        const rawText   = normalizeTex(cbody);
-        const maybeMath = wrapInlineMathIfNeeded(rawText);
-
-        const keySpan  = document.createElement('span');
-        keySpan.className = 'choice-key';
-        keySpan.textContent = `${key}) `;
-
-        const txtSpan  = document.createElement('span');
-        txtSpan.className = 'choice-text';
-
-        const isMath =
-          /\$[^$]+\$/.test(rawText) ||
-          /\\\([^)]+\\\)/.test(rawText) ||
-          (maybeMath && maybeMath.startsWith('\\('));
-
-        if (isMath) {
-          txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
-        } else {
-          txtSpan.innerHTML = proseToHTML(rawText, { inline: true }); // NEW
-        }
-
-        btn.replaceChildren(keySpan, txtSpan);
-      }
-
-      btn.onclick = () => submitAnswer(key);
-      choicesDiv.appendChild(btn);
-    }
-
-    if (token !== renderToken) return;
-    await typeset(choicesDiv);
-    // start a fresh view-session for this question
-    vtReset();
-    vtStart();
-    if (token !== renderToken) return;
-
-    $('#feedback').textContent = '';
-    $('#status').textContent   = '';
-  }catch(e){
-    console.error(e);
-    if (token !== renderToken) return;
-    $('#status').textContent = `Failed to load question: ${e.message}`;
+    // clear previous UI
     $('#stem').innerHTML = '';
     $('#choices').innerHTML = '';
     $('#feedback').textContent = '';
-  }
-}
 
-  
+    $('#qCard')?.classList.remove('hidden');
+    $('#qCard').style.display='block';
+
+    try{
+      const tag = new URLSearchParams(location.search).get('tag') || '';
+      const exclude = Array.from(seenIds);
+
+      let url;
+      if (bundleFollowupFor) {
+        // Ask backend for the next item in the bundle sequence
+        url = `/api/questions/?limit=1&bundle_followup_for=${encodeURIComponent(bundleFollowupFor)}&_t=${Date.now()}`;
+      } else {
+        // Normal selection (random with exclude)
+        url = `/api/questions/?limit=1&offset=${qOffset}&ordering=-id&_t=${Date.now()}`
+            + (tag ? `&tag=${encodeURIComponent(tag)}` : '')
+            + (exclude.length ? `&exclude=${encodeURIComponent(exclude.join(','))}` : '');
+      }
+
+      const qRes = await api(url);
+      if (token !== renderToken) return;
+
+      if (!qRes.count || !qRes.questions?.length) {
+        $('#stem').innerHTML = 'No unseen questions left for this filter.';
+        $('#choices').innerHTML = '';
+        $('#feedback').textContent = '';
+
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.textContent = 'Restart session (allow repeats)';
+        btn.onclick = () => { seenIds.clear(); qOffset = 0; loadQuestion(); };
+        $('#choices').appendChild(btn);
+
+        await typeset();
+        return;
+      }
+
+      currentQ = qRes.questions[0];
+      window._lastQid = currentQ.id;
+      seenIds.add(currentQ.id);
+      qTotal   = qRes.count || qTotal;
+      qOffset  = (qOffset + 1) % Math.max(qTotal, 1);
+
+      // ---------- Shared asset update (only when key changes) ----------
+      const assetKey = (currentQ.assets && currentQ.assets.find(a => /^passage-/.test(a)))
+                       || extractAssetKeyFromStem(currentQ.stem_md)
+                       || null;
+
+      if (assetKey !== currentAsset) {
+        currentAsset = assetKey;
+        if (currentAsset) {
+          $('#shared-asset').innerHTML = '<div class="muted">Loading shared passage…</div>';
+          try {
+            const html = await renderSharedAsset(currentAsset);
+            if (token !== renderToken) return;
+            $('#shared-asset').innerHTML = html;
+          } catch (e) {
+            if (token !== renderToken) return;
+            $('#shared-asset').innerHTML = `<div class="muted">Shared passage unavailable (${e.message})</div>`;
+          }
+        } else {
+          $('#shared-asset').innerHTML = '';
+        }
+      }
+
+      // ---------- STEM (heavy block → PDF) ----------
+      const rawStem  = currentQ.stem_md || '';
+      const body     = stripDocBody(rawStem);
+      const parts    = extractFirstHeavyBlock(body);
+
+      if(parts){
+        const beforeHTML = proseToHTML(normalizeTex(cleanBefore(parts.before)));
+        const afterHTML  = proseToHTML(normalizeTex(cleanAfter(parts.after)));
+        const pdfUrl     = await fetchPdfBlobUrl(parts.block);
+        if (token !== renderToken) return;
+        $('#stem').innerHTML =
+          `${beforeHTML}<object class="latex-pdf" data="${pdfUrl}" type="application/pdf"></object>${afterHTML}`;
+      }else{
+        if (token !== renderToken) return;
+        $('#stem').innerHTML = proseToHTML(body);
+      }
+
+      // MathJax AFTER stem is in the DOM
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (window.MathJax?.typesetClear) MathJax.typesetClear();
+      await typeset($('#stem'));
+      if (token !== renderToken) return;
+
+      // ---------- CHOICES (fixed A–E order) ----------
+      const choicesDiv = $('#choices'); choicesDiv.innerHTML = '';
+      const choices = currentQ.choices || {};
+      const preferred = ['A','B','C','D','E'];
+      let entries = preferred.filter(k => Object.prototype.hasOwnProperty.call(choices, k))
+                             .map(k => [k, choices[k]]);
+      if (entries.length === 0) {
+        entries = Object.entries(choices).sort((a,b) => a[0].localeCompare(b[0]));
+      }
+
+      if (token !== renderToken) return;
+      for (const [key,label] of entries){
+        const cbody  = stripDocBody(label || '');
+        const cparts = extractFirstHeavyBlock(cbody);
+
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+
+        if(cparts){
+          const before = proseToHTML(normalizeTex(cleanBefore(cparts.before)));
+          const after  = proseToHTML(normalizeTex(cleanAfter(cparts.after)));
+          const url    = await fetchPdfBlobUrl(cparts.block);
+          if (token !== renderToken) return;
+          btn.innerHTML =
+            `<span class="choice-key">${key})</span>${before}` +
+            `<object class="latex-pdf choice" data="${url}" type="application/pdf"></object>` +
+            `${after}`;
+        } else {
+          const rawText   = normalizeTex(cbody);
+          const maybeMath = wrapInlineMathIfNeeded(rawText);
+
+          const keySpan  = document.createElement('span');
+          keySpan.className = 'choice-key';
+          keySpan.textContent = `${key}) `;
+
+          const txtSpan  = document.createElement('span');
+          txtSpan.className = 'choice-text';
+
+          const isMath =
+            /\$[^$]+\$/.test(rawText) ||
+            /\\\([^)]+\\\)/.test(rawText) ||
+            (maybeMath && maybeMath.startsWith('\\('));
+
+          if (isMath) {
+            txtSpan.textContent = maybeMath;      // raw TeX -> MathJax
+          } else {
+            txtSpan.innerHTML = proseToHTML(rawText, { inline: true });
+          }
+
+          btn.replaceChildren(keySpan, txtSpan);
+        }
+
+        btn.onclick = () => submitAnswer(key);
+        choicesDiv.appendChild(btn);
+      }
+
+      if (token !== renderToken) return;
+      await typeset(choicesDiv);
+
+      // start a fresh view-session for this question
+      vtReset();
+      vtStart();
+
+      $('#feedback').textContent = '';
+      $('#status').textContent   = '';
+    }catch(e){
+      console.error(e);
+      if (token !== renderToken) return;
+      $('#status').textContent = `Failed to load question: ${e.message}`;
+      $('#stem').innerHTML = '';
+      $('#choices').innerHTML = '';
+      $('#feedback').textContent = '';
+    }
+  }
 
   async function submitAnswer(choiceKey){
     if(!attemptId || !currentQ) return;
@@ -515,14 +535,18 @@ function unmaskLists(h){
       $('#feedback').className   = 'err';
     }
   }
+
+  // Next button: send bundle_followup_for when we have a previous question id
   const nextBtn = document.getElementById('nextBtn');
   if (nextBtn) {
     nextBtn.addEventListener('click', async () => {
       await logViewIfAny();   // record time spent on the current question
       vtReset();              // clear the timer
-      await loadQuestion();   // show the next one
+      const prev = window._lastQid || null;
+      await loadQuestion(prev); // if prev is in a bundle, backend returns the next one
     });
   }
+
   document.addEventListener('DOMContentLoaded', startPractice);
 </script>
 
@@ -536,6 +560,7 @@ function unmaskLists(h){
 </script>
 <script id="MathJax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 {% endblock %}
+
 
 
 

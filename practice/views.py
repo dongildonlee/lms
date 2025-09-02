@@ -245,6 +245,61 @@ def get_questions(request):
         except ValueError:
             limit = 1
 
+        # --- Bundle follow-up: if the client sends the previous question, return the next in the bundle
+        prev_id = request.query_params.get("bundle_followup_for")
+        if prev_id:
+            try:
+                prev = Question.objects.get(id=int(prev_id))
+            except (Question.DoesNotExist, ValueError):
+                prev = None
+
+            if prev and prev.diagnostic_keys:
+                # Accept both dict-style {"bundle": "...", "bundle_index": 1} and list-of-strings
+                def kv(keys, name):
+                    if isinstance(keys, dict):
+                        return keys.get(name)
+                    if isinstance(keys, list):
+                        for s in keys:
+                            if isinstance(s, str) and s.startswith(name + ":"):
+                                return s.split(":", 1)[1]
+                    return None
+
+                bundle = kv(prev.diagnostic_keys, "bundle")
+                idx = kv(prev.diagnostic_keys, "bundle_index")
+                try:
+                    idx_int = int(idx) if idx is not None else None
+                except (TypeError, ValueError):
+                    idx_int = None
+
+                if bundle and idx_int is not None:
+                    # Prefer dict-style JSONField match
+                    nxt = (
+                        Question.objects
+                        .filter(diagnostic_keys__contains={"bundle": bundle, "bundle_index": idx_int + 1})
+                        .order_by("id")
+                        .first()
+                    )
+                    # Fallback for list-of-strings storage (e.g., ["bundle:K…","bundle_index:2"])
+                    if not nxt:
+                        nxt = (
+                            Question.objects
+                            .filter(diagnostic_keys__contains=[f"bundle:{bundle}", f"bundle_index:{idx_int + 1}"])
+                            .order_by("id")
+                            .first()
+                        )
+                    if nxt:
+                        return Response({
+                            "count": 1,
+                            "questions": [{
+                                "id": nxt.id,
+                                "type": nxt.type,
+                                "stem_md": nxt.stem_md or "",
+                                "choices": (nxt.choices or {}),
+                                "version": nxt.version,
+                                "tags": list(nxt.tags.values_list("name", flat=True)),
+                            }]
+                        })
+
         # --- NEW: exclude list from client (comma-separated IDs) -------------
         exclude_raw = (request.query_params.get("exclude") or "").strip()
         exclude_ids = []
@@ -275,7 +330,7 @@ def get_questions(request):
             if subjects_qs is not None:
                 qs = qs.filter(tags__in=subjects_qs).distinct()
 
-        # --- NEW: apply exclude BEFORE ordering/slicing -----------------------
+        # --- Apply exclude BEFORE ordering/slicing ---------------------------
         if exclude_ids:
             qs = qs.exclude(id__in=exclude_ids)
 
@@ -283,11 +338,12 @@ def get_questions(request):
         qs = qs.order_by(Random())[:max(1, limit)]
 
         def _norm(s: str) -> str:
-            if not s: return ""
-            s = re.sub(r'<br\s*/?>',' ', s, flags=re.I)
-            s = re.sub(r'\\\\(?!\[|\(|\{)',' ', s)
-            s = re.sub(r'\s*\n+\s*',' ', s)
-            s = re.sub(r'\s{2,}',' ', s)
+            if not s:
+                return ""
+            s = re.sub(r'<br\s*/?>', ' ', s, flags=re.I)
+            s = re.sub(r'\\\\(?!\[|\(|\{)', ' ', s)
+            s = re.sub(r'\s*\n+\s*', ' ', s)
+            s = re.sub(r'\s{2,}', ' ', s)
             return s.strip()
 
         out = []
@@ -304,6 +360,7 @@ def get_questions(request):
         return Response({"count": len(out), "questions": out})
     except Exception as e:
         return Response({"error": str(e), "trace": traceback.format_exc()}, status=500)
+
 
 
 # --- pages (templates) -------------------------------------------------------
