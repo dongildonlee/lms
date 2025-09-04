@@ -1,5 +1,6 @@
+cat > content/KSAT-English/past-exams/2025.tex <<'TEX'
 %% tags: [KSAT - English, KSAT - English 2025]
-%% type: asset-only
+%% type: mcq
 
 \documentclass{article}
 \usepackage[T1]{fontenc}
@@ -8,13 +9,13 @@
 \usepackage[normalem]{ulem} % for \uline
 \usepackage{tcolorbox}
 
-% no-op markers for the importer
+% importer no-ops
 \newenvironment{asset}[1]{}{}
 \newcommand{\uses}[1]{}
 
 \begin{document}
 
-% === Passages for Q43–45: (A)–(D) stacked, each in a framed box ===
+% ---------- Shared passage asset (A)–(D) ----------
 \begin{asset}{ksat-2025-43-45-passages}
 \begin{center}
 
@@ -44,4 +45,20 @@ The weather was perfect. Ethan and Sean set off hiking along the valley by Aicke
 \end{center}
 \end{asset}
 
+% ---------- Problem 43 that USES the asset ----------
+\begin{center}\large\textbf{43.} 주어진 글 (A)에 이어질 내용을 순서에 맞게 배열한 것으로 가장 적절한 것은?\end{center}
+
+\begin{tcolorbox}[colback=white,colframe=black!15,boxrule=0.4pt,arc=1pt,enhanced]
+\uses{ksat-2025-43-45-passages}
+
+\bigskip
+① (B) – (D) – (C)\quad
+② (C) – (B) – (D)\quad
+③ (C) – (D) – (B)\quad
+④ (D) – (B) – (C)\quad
+⑤ (D) – (C) – (B)
+\end{tcolorbox}
+
 \end{document}
+TEX
+
