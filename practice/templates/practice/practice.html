@@ -268,6 +268,9 @@ function unmaskLists(h){
   // manual line breaks from LaTeX: \\ -> <br>
   h = h.replace(/\\\s*/g, '<br>');
 
+  // manual line breaks from LaTeX: \\ → <br>
+  h = h.replace(/\\\s*/g, '<br>');
+
   // now collapse newlines so inline $…$ doesn't get split
   h = h.replace(/\s*\n+\s*/g, ' ');
 
@@ -277,11 +280,13 @@ function unmaskLists(h){
 
   function normalizeTex(s){
     if(!s) return '';
-    return s.replace(/\\\\\s*/g,' ')
+    return s
+            /* keep LaTeX \\ intact; do NOT strip it here */
             .replace(/\s*\n\s*/g,' ')
             .replace(/\s{2,}/g,' ')
             .trim();
   }
+
 
   // Wrap bare math for MathJax (don’t touch text that’s already wrapped)
   function wrapInlineMathIfNeeded(s){
