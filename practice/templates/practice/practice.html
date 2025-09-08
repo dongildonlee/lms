@@ -265,6 +265,9 @@ function unmaskLists(h){
        .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
        .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
 
+  // manual line breaks from LaTeX: \\ -> <br>
+  h = h.replace(/\\\s*/g, '<br>');
+
   // now collapse newlines so inline $…$ doesn't get split
   h = h.replace(/\s*\n+\s*/g, ' ');
 
