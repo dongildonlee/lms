@@ -266,6 +266,7 @@ function unmaskLists(h){
        .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
   // underline and horizontal space from LaTeX
   h = h.replace(/\\underline\{([^}]*)\}/g, '<u>$1</u>')
+       .replace(/\\underline\{\\hspace\{([^}]*)\}\}/g, '<span style="display:inline-block;width:$1;border-bottom:1px solid currentColor;line-height:0.9em;vertical-align:-0.1em;"></span>')
        .replace(/\\hspace\{([^}]*)\}/g, '<span style="display:inline-block;width:$1"></span>')
        // thin/quad spaces and ~ or \! -> normal space
        .replace(/\\,|\\quad|~|\\!/g, ' ');
