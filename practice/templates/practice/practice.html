@@ -310,20 +310,31 @@ function unmaskLists(h){
     return `\\(${s.replace(/%/g, '\\%')}\\)`; // escape % to avoid TeX comments
   }
 
-  async function fetchPdfBlobUrl(tex){
-    const res = await fetch('/practice/tex/pdf/', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'X-CSRFToken': csrftoken },
-      body: JSON.stringify({ tex })
-    });
-    const ct = (res.headers.get('content-type') || '').toLowerCase();
-    if(!res.ok || !ct.includes('application/pdf')){
-      const msg = await res.text();
-      throw new Error(`TeX compile failed ${res.status}: ${msg}`);
+  async function fetchPdfBlobUrl(tex, attempts = 2, minOkBytes = 20000){
+  let lastErr = null;
+  for (let i = 0; i < attempts; i++){
+    try{
+      const res = await fetch('/practice/tex/pdf/', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify({ tex })
+      });
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      const blob = await res.blob();
+      // extremely small PDFs usually mean the embedded image didn't make it
+      const looksBad = !ct.includes('application/pdf') || blob.size < minOkBytes;
+      if (!looksBad){
+        return URL.createObjectURL(blob);
+      }
+      lastErr = new Error(`TeX compile returned tiny/bad PDF (ct=${ct}, size=${blob.size})`);
+    }catch(e){
+      lastErr = e;
     }
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
+    // short pause before retry
+    await new Promise(r => setTimeout(r, 200));
   }
+  throw lastErr || new Error('TeX compile failed');
+}
 
   // ---- MathJax: manual typeset (deterministic) ------------------------------
   async function ensureMathJaxReady() {
