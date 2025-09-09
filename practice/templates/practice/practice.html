@@ -264,6 +264,12 @@ function unmaskLists(h){
   h = h.replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
        .replace(/\\emph\{([^}]*)\}/g,   '<em>$1</em>')
        .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>');
+  // underline and horizontal space from LaTeX
+  h = h.replace(/\\underline\{([^}]*)\}/g, '<u>$1</u>')
+       .replace(/\\hspace\{([^}]*)\}/g, '<span style="display:inline-block;width:$1"></span>')
+       // thin/quad spaces and ~ or \! -> normal space
+       .replace(/\\,|\\quad|~|\\!/g, ' ');
+
 
   // manual line breaks from LaTeX: \\ -> <br>
   h = h.replace(/\\\s*/g, '<br>');
