@@ -530,25 +530,41 @@ def analysis_all(request, symbol_key: str):
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <style>
-  body{{font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;padding:16px;}}
+  body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f7f7fb;color:#111;padding:16px}}
   a{{text-decoration:none}}
   .back{{margin-bottom:12px;display:inline-block}}
-  .wrap{{max-width:1200px;margin:0 auto;}}
-  .toolbar{{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 16px 0}}
+  .wrap{{max-width:1200px;margin:0 auto}}
+  .toolbar{{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 16px}}
   .stack{{display:flex;flex-direction:column;gap:24px}}
-  .card{{padding:8px;border:1px solid #e5e7eb;border-radius:8px;background:#fff}}
-  h2{{margin:0 0 8px 0;font-size:18px;text-align:center}}
-  #chart-c, #chart-p{{width:100%;height:600px}}
-  @media (max-width:700px){{ #chart-c, #chart-p{{height:420px}} }}
+  .card{{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:12px}}
+  h2{{margin:0 0 8px;font-size:20px;font-weight:600;text-align:center}}
+  #chart-c,#chart-p{{width:100%;height:600px}}
+  @media (max-width:700px){{ #chart-c,#chart-p{{height:420px}} }}
   input[type=month]{{padding:6px}}
-  select, button{{padding:6px 10px;cursor:pointer}}
-  .hint{{color:#555}}
+  select,button{{padding:6px 10px;cursor:pointer}}
+  .hint{{color:#6b7280}}
   .btn{{display:inline-block;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;color:#111}}
   .btn:hover{{background:#eef2ff}}
-  .tbl{{width:100%;border-collapse:collapse}}
-  .tbl th,.tbl td{{border:1px solid #e5e7eb;padding:6px 8px;text-align:left;white-space:nowrap}}
-  .tbl thead th{{background:#f8fafc}}
+
+  /* Table */
+  .tbl{{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}}
+  .tbl thead th{{position:sticky;top:0;z-index:1;background:#f8fafc;text-align:left;font-weight:600;border-bottom:1px solid #e5e7eb;padding:8px}}
+  .tbl tbody td{{border-bottom:1px solid #f1f5f9;padding:8px;white-space:nowrap}}
+  .tbl tbody tr:hover{{background:#fafafa}}
+  .right{{text-align:right}}
+
+  /* Badges & numbers */
+  .badge{{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.02em}}
+  .badge.long{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}}
+  .badge.short{{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}}
+  .pos{{color:#16a34a}}
+  .neg{{color:#dc2626}}
+
+  /* Sort button (if used) */
+  .th-sort{{background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;cursor:pointer}}
 </style>
+
+
 </head>
 <body>
 <a class="back" href="/investments">← Back to Investments</a>
