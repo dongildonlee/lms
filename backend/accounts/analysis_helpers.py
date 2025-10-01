@@ -154,47 +154,39 @@ def slice_and_resample(df: pd.DataFrame, window: PeriodWindow, tf: str) -> pd.Da
     return view
 
 def build_trades_for_strategy(view: pd.DataFrame, strat_key: str, fee: float) -> tuple[pd.DataFrame, str]:
-    """
-    Routes to the chosen strategy and returns (trades_df, title).
+    # Lazy import to avoid circulars if build_trades lives in views_analysis
+    from .views_analysis import build_trades  # noqa: WPS433
+    # Kalman stubs live in strategies.py
+    from .strategies import kalman_cross, kalman_long, kalman_short
 
-    Notes:
-    - Keeps lazy imports to avoid circular import issues.
-    - Assumes `fee` passed in is ROUND-TRIP (e.g., 0.002 = 0.2% total).
-      Kalman helpers expect per-side fees, so we pass fee_side = fee / 2.
-    """
-    k = (strat_key or "").lower()
-
-    # ---- EMA 20/50/100 stack strategies (legacy) ----
-    if k == "ema_stack_long":
-        from .views_analysis import build_trades  # lazy import on purpose
+    if strat_key == "ema_stack_long":
         title = "EMA 20/50/100 Stack — Long"
         trades_df = build_trades(view, mode="long", fee=fee)
-        return (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame(trades_df)), title
-
-    if k == "ema_stack_short":
-        from .views_analysis import build_trades
+    elif strat_key == "ema_stack_short":
         title = "EMA 20/50/100 Stack — Short"
         trades_df = build_trades(view, mode="short", fee=fee)
-        return (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame(trades_df)), title
-
-    if k == "ema_stack_long_short":
-        from .views_analysis import build_trades
+    elif strat_key == "ema_stack_long_short":
         title = "EMA 20/50/100 Stack — Long & Short"
         trades_df = build_trades(view, mode="both", fee=fee)
-        return (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame(trades_df)), title
-
-    # ---- Lorentzian (advanced-ta) ----
-    if k in ("lorentzian_advta", "lorentzian"):
-        from .strategy_lorentzian import lorentzian_trades_advta  # lazy import
+    elif strat_key == "lorentzian_advta":
         title = "Lorentzian Classification — Equity"
         trades_df = lorentzian_trades_advta(view, fee_frac=fee)
-        return (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame(trades_df)), title
+    # === NEW: Kalman strategies (placeholders for now) ===
+    elif strat_key == "kalman_cross":
+        title = "Kalman Cross — Long & Short"
+        trades_df = kalman_flip_trades(view, fee_frac=fee)
+    elif strat_key == "kalman_long":
+        title = "Kalman Cross — Long Only"
+        trades_df = kalman_long_trades(view, fee_frac=fee)
+    elif strat_key == "kalman_short":
+        title = "Kalman Cross — Short Only"
+        trades_df = kalman_short_trades(view, fee_frac=fee)
+    else:
+        title = "EMA 20/50/100 Stack — Long"
+        trades_df = build_trades(view, mode="long", fee=fee)
 
-    # ---- default fallback (EMA long) ----
-    from .views_analysis import build_trades
-    title = "EMA 20/50/100 Stack — Long"
-    trades_df = build_trades(view, mode="long", fee=fee)
     return (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame(trades_df)), title
+
 
 
 

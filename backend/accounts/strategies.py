@@ -372,8 +372,14 @@ def _append_trade(trades, side, ent_t, ent_p, ex_t, ex_p, bars, fee_side):
         "reason": "",
     })
 
+
+def _empty_trades() -> pd.DataFrame:
+    return pd.DataFrame(columns=TRADE_COLS)
+
+
 # ---------- long-only ----------
-def kalman_cross_long_only(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: float = 0.05, tp_pct: float = 0.10, short_len: int = 50, long_len: int = 150, slope_ema: int = 5, extra_smooth: int = 10) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
+def kalman_long(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: float = 0.05, tp_pct: float = 0.10,
+                           short_len: int = 50, long_len: int = 150, slope_ema: int = 5, extra_smooth: int = 10) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
     sig = kalman_cross_signals(df, short_len, long_len, slope_ema, extra_smooth)
     o, h, l, c = sig["open"], sig["high"], sig["low"], sig["close"]
     buy, sell  = sig["buy_sig"], sig["sell_sig"]
@@ -400,7 +406,8 @@ def kalman_cross_long_only(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct:
     return equity_s, sig, trades_df
 
 # ---------- short-only ----------
-def kalman_cross_short_only(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: float = 0.05, tp_pct: float = 0.10, short_len: int = 50, long_len: int = 150, slope_ema: int = 5, extra_smooth: int = 10) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
+def kalman_short(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: float = 0.05, tp_pct: float = 0.10,
+                            short_len: int = 50, long_len: int = 150, slope_ema: int = 5, extra_smooth: int = 10) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
     sig = kalman_cross_signals(df, short_len, long_len, slope_ema, extra_smooth)
     o, h, l, c = sig["open"], sig["high"], sig["low"], sig["close"]
     buy, sell  = sig["buy_sig"], sig["sell_sig"]
@@ -427,7 +434,8 @@ def kalman_cross_short_only(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct
     return equity_s, sig, trades_df
 
 # ---------- both (flip) ----------
-def kalman_cross_both(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: float = 0.05, tp_pct: float = 0.10, short_len: int = 50, long_len: int = 150, slope_ema: int = 5, extra_smooth: int = 10) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
+def kalman_cross(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: float = 0.05, tp_pct: float = 0.10,
+                      short_len: int = 50, long_len: int = 150, slope_ema: int = 5, extra_smooth: int = 10) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
     sig = kalman_cross_signals(df, short_len, long_len, slope_ema, extra_smooth)
     o, h, l, c = sig["open"], sig["high"], sig["low"], sig["close"]
     buy, sell  = sig["buy_sig"], sig["sell_sig"]
@@ -440,13 +448,13 @@ def kalman_cross_both(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: floa
             if hit:
                 _append_trade(trades, "long", sig.index[ent_idx], ent_price, sig.index[i], px, bars+1, fee_side); trades[-1]["reason"] = why
                 pos = 0; ent_idx = None; ent_price = np.nan; bars = 0
-                equity[i] = equity[i-1] * trades[-1]["net_factor"]
+                equity[i] = equity[i-1] * trades[-1]["net_factor"]; continue
         elif pos == -1:
             hit, px, why = _exit_short_by_stops(o.iat[i], h.iat[i], l.iat[i], ent_price, sl_pct, tp_pct)
             if hit:
                 _append_trade(trades, "short", sig.index[ent_idx], ent_price, sig.index[i], px, bars+1, fee_side); trades[-1]["reason"] = why
                 pos = 0; ent_idx = None; ent_price = np.nan; bars = 0
-                equity[i] = equity[i-1] * trades[-1]["net_factor"]
+                equity[i] = equity[i-1] * trades[-1]["net_factor"]; continue
         if buy.iat[i]:
             if pos == -1:
                 _append_trade(trades, "short", sig.index[ent_idx], ent_price, sig.index[i], c.iat[i], bars+1, fee_side); trades[-1]["reason"] = "signal_flip"
@@ -471,4 +479,5 @@ def kalman_cross_both(df: pd.DataFrame, *, fee_side: float = 0.001, sl_pct: floa
     trades_df = pd.DataFrame(trades)
     equity_s = pd.Series(equity, index=sig.index, name="equity")
     return equity_s, sig, trades_df
+
 

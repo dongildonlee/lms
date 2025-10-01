@@ -487,7 +487,9 @@ def analysis_all(request, symbol_key: str):
     view = slice_and_resample(df, window, tf)
 
     # strategies (rolled back to 4 options)
-    allowed = {"ema_stack_long", "ema_stack_short", "ema_stack_long_short", "lorentzian_advta"}
+    allowed = {
+        "ema_stack_long", "ema_stack_short", "ema_stack_long_short",
+        "lorentzian_advta", "kalman_cross","kalman_long","kalman_short"}
     strat_key = (request.GET.get("strat") or "ema_stack_long").lower()
     if strat_key not in allowed:
         strat_key = "ema_stack_long"
@@ -521,6 +523,10 @@ def analysis_all(request, symbol_key: str):
     sel_short = "selected" if strat_key == "ema_stack_short" else ""
     sel_both  = "selected" if strat_key == "ema_stack_long_short" else ""
     sel_lc    = "selected" if strat_key == "lorentzian_advta" else ""
+    sel_kcross  = "selected" if strat_key == "kalman_cross"  else ""
+    sel_klong  = "selected" if strat_key == "kalman_long"  else ""
+    sel_kshort = "selected" if strat_key == "kalman_short" else ""
+
 
     html = f"""<!doctype html>
 <html lang="en">
@@ -587,6 +593,10 @@ def analysis_all(request, symbol_key: str):
       <option value="ema_stack_short" {sel_short}>EMA Stack — Short</option>
       <option value="ema_stack_long_short" {sel_both}>EMA Stack — Long &amp; Short</option>
       <option value="lorentzian_advta" {sel_lc}>Lorentzian Classification</option>
+      <option value="kalman_cross"  {sel_kflip}>Kalman Cross — Long &amp; Short</option>
+      <option value="kalman_long"  {sel_klong}>Kalman Cross — Long Only</option>
+      <option value="kalman_short" {sel_kshort}>Kalman Cross — Short Only</option>
+
     </select>
     <button type="submit">Apply</button>
     <a class="btn" id="nbBtn" href="{jupyter_url}">Open in Jupyter</a>
