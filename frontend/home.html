@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <title>Home</title>
+    </head>
+    <body>
+        <script>if (!localStorage.getItem("mockCurrentUser")) location.replace("/login");</script>
+        <h1>Home</h1>
+        <p>You are logged in (mock).</p>
+        <button id="logout" type="button">Logout</button>
+        <script src="app.js"></script>
+    </body>
+</html>
+

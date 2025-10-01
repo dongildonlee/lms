@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Login</title>
+        <link rel="stylesheet" href="styles.css">
+    </head>
+    <body>
+        <h1>Login</h1>
+        <form id="login-form" action="/api/signin/" method="post">
+            <div>
+                <label for="username">Username:</label>
+                <input id="username" name="username" type="text" autocomplete="username" required>
+            </div>
+            <div>
+                <label for="password">Password:</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        <p id="status"></p>
+        <p><a href="/signup">Create an account</a></p>
+        <script src="/static/login.js"></script>
+    </body>
+</html>
+

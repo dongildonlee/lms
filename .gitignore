@@ -1,25 +1,41 @@
-# Python / venv
-.venv/
-env/
-venv/
-__pycache__/
-*.pyc
-
-# Django
-db.sqlite3
-staticfiles/
-
-# Node (if you add later)
-node_modules/
-
-# macOS / IDE
+# macOS
 .DS_Store
-.vscode/
+
+# IDEs
 .idea/
+.vscode/
 
-# Env files (never commit secrets)
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.eggs/
+*.log
+
+# Virtual envs
+.venv/
+.venv3*/
+venv/
+backend/.venv*/
+frontend/.venv*/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Django / local db
+db.sqlite3
+
+# Env / secrets
 .env
+.env.*
 
-# local-only
-requirements-local.txt
-seed.json
+# Node (if any)
+node_modules/
+dist/
+build/
+
+# Data (avoid committing large market files)
+data/**/*.csv
+datasets/**/*.csv
+*.parquet
+*.feather
