@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from .views import home_page, login_page, signup_page, dashboard, investments_page
+from .views import home_page, login_page, signup_page, dashboard, investments_page, stocks_page
 
 urlpatterns = [
     path("", home_page, name="home"),
@@ -28,7 +28,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/", include("accounts.urls")),
     path("dashboard/", dashboard, name="dashboard"),
-    path("investments/", investments_page, name="investments")
+    path("investments/", investments_page, name="investments"),
+    path("stocks/", stocks_page, name="stocks")
 ]
 
 if settings.DEBUG:

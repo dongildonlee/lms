@@ -29,3 +29,6 @@ def investments_page(request):
     if not request.user.is_superuser:
         return HttpResponseForbidden("Superuser only")
     return render(request, "investments.html")
+
+def stocks_page(request):
+    return render(request, "stocks.html")

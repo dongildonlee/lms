@@ -3,15 +3,16 @@ from pathlib import Path
 import json
 import pandas as pd
 import plotly.graph_objects as go
+from django.http import JsonResponse
 from django.http import HttpResponse, HttpResponseBadRequest 
 from string import Template
 from html import escape  # (you already use escape below; keep this too)
 from django.urls import reverse
-import os, sys, time, subprocess, tempfile, socket
+import re, os, sys, time, subprocess, tempfile, socket
 from urllib.parse import quote
 import importlib.util
 from .analysis_helpers import add_markers_to_candle, build_trades_for_strategy
-
+from . import views_data
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -1284,5 +1285,103 @@ def analysis_to_jupyter(request, symbol_key: str):
     return HttpResponseRedirect(final_url)
 
 
+def _find_csv_for_symbol(symbol: str, asset: str | None = None) -> Path | None:
+    """
+    Tolerant CSV discovery.
+    - Crypto default: match like 'btcusd_5m_coinbase.csv', 'solusd_5m_coinbase.csv'
+    - Stocks default: any '<sym>*csv' (we pick the most recently modified)
+    You can tighten this pattern later if you standardize filenames.
+    """
+    sym = symbol.lower()
+    candidates: list[Path] = []
 
+    # Prefer explicit crypto naming if present
+    crypto_names = [f"{sym}usd_5m_coinbase.csv", f"{sym}usd_1h_coinbase.csv"]
+    for name in crypto_names:
+        p = DATA_DIR / name
+        if p.exists():
+            candidates.append(p)
+
+    # Fallback: any CSV that starts with the symbol (for stocks or custom feeds)
+    # e.g., aapl_1h_yahoo.csv, nvda_daily.csv, msft.csv, etc.
+    for p in DATA_DIR.glob(f"{sym}*.csv"):
+        if p.is_file():
+            candidates.append(p)
+
+    if not candidates:
+        return None
+
+    # Pick the most recently modified as the best guess
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0]
+
+def _latest_ts_from_csv(path: Path) -> pd.Timestamp | None:
+    """Read just enough to get latest timestamp (supports 'ts' or 'date'+'time')."""
+    try:
+        df = pd.read_csv(path, usecols=None, low_memory=False)
+    except Exception:
+        return None
+    if "ts" in df.columns:
+        ts = pd.to_datetime(df["ts"], errors="coerce")
+        ts = ts.dropna()
+        return None if ts.empty else ts.iloc[-1]
+    # common crypto layout in your codebase: date, time
+    if {"date", "time"} <= set(df.columns):
+        ts = pd.to_datetime(df["date"] + " " + df["time"], errors="coerce")
+        ts = ts.dropna()
+        return None if ts.empty else ts.iloc[-1]
+    # last-ditch: try any datetime-like column
+    for c in df.columns:
+        s = pd.to_datetime(df[c], errors="coerce")
+        if s.notna().sum() > 0:
+            return s.dropna().iloc[-1]
+    return None
+
+def analysis_check_csv(request, symbol: str):
+    """
+    GET /api/analysis/check_csv/<symbol>/?asset=crypto|stock&min_rows=500&fresh_hours=48
+    Returns: { ok, exists, path, rows, latest_ts, fresh, reason }
+    """
+    asset = request.GET.get("asset", "").lower() or None
+    min_rows = int(request.GET.get("min_rows", "100"))
+    fresh_hours = int(request.GET.get("fresh_hours", "48"))
+
+    path = _find_csv_for_symbol(symbol, asset=asset)
+    if path is None:
+        return JsonResponse({
+            "ok": False, "exists": False, "reason": "No CSV found for symbol."
+        }, status=404)
+
+    # quick sanity checks
+    try:
+        # Try to get last ts quickly and row count
+        rows = sum(1 for _ in open(path, "r", encoding="utf-8", errors="ignore")) - 1  # minus header
+    except Exception:
+        rows = None
+
+    latest_ts = _latest_ts_from_csv(path)
+    now = pd.Timestamp.utcnow()
+    fresh = (latest_ts is not None) and ((now - latest_ts) <= pd.Timedelta(hours=fresh_hours))
+
+    if rows is None or rows < min_rows:
+        return JsonResponse({
+            "ok": False, "exists": True, "path": str(path),
+            "rows": rows, "latest_ts": (None if latest_ts is None else latest_ts.isoformat()),
+            "fresh": bool(fresh),
+            "reason": f"CSV too small: need >= {min_rows} rows."
+        }, status=409)
+
+    if not fresh:
+        return JsonResponse({
+            "ok": False, "exists": True, "path": str(path),
+            "rows": rows, "latest_ts": (None if latest_ts is None else latest_ts.isoformat()),
+            "fresh": False,
+            "reason": f"CSV not fresh (>{fresh_hours}h old)."
+        }, status=409)
+
+    return JsonResponse({
+        "ok": True, "exists": True, "path": str(path),
+        "rows": rows, "latest_ts": latest_ts.isoformat(),
+        "fresh": True
+    })
 

@@ -3,7 +3,9 @@ from .views import signup
 from .views_auth import signin
 from .views_update import api_get_csv
 from . import views_analysis as views
+from . import views_data
 from .views_analysis import analysis_candles, analysis_cumprofit, analysis_all
+
 
 urlpatterns = [
     path("signup/", signup, name="signup"),
@@ -13,4 +15,6 @@ urlpatterns = [
     path("analysis/cumprofit/<str:symbol_key>/", analysis_cumprofit, name="analysis_cumprofit"),
     path("analysis/all/<str:symbol_key>/", analysis_all, name="analysis_all"),
     path("analysis/jupyter/<str:symbol_key>/", views.analysis_to_jupyter, name="analysis_to_jupyter"),
+    path("analysis/check_csv/<str:symbol>/", views.analysis_check_csv, name="analysis_check_csv"),
+    path("analysis/fill_csv/<str:symbol>/",  views_data.analysis_fill_csv,  name="analysis_fill_csv"),
 ]
