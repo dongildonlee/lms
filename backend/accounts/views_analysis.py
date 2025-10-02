@@ -593,7 +593,7 @@ def analysis_all(request, symbol_key: str):
       <option value="ema_stack_short" {sel_short}>EMA Stack — Short</option>
       <option value="ema_stack_long_short" {sel_both}>EMA Stack — Long &amp; Short</option>
       <option value="lorentzian_advta" {sel_lc}>Lorentzian Classification</option>
-      <option value="kalman_cross"  {sel_kflip}>Kalman Cross — Long &amp; Short</option>
+      <option value="kalman_cross"  {sel_kcross}>Kalman Cross — Long &amp; Short</option>
       <option value="kalman_long"  {sel_klong}>Kalman Cross — Long Only</option>
       <option value="kalman_short" {sel_kshort}>Kalman Cross — Short Only</option>
 

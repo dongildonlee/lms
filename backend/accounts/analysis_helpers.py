@@ -154,10 +154,20 @@ def slice_and_resample(df: pd.DataFrame, window: PeriodWindow, tf: str) -> pd.Da
     return view
 
 def build_trades_for_strategy(view: pd.DataFrame, strat_key: str, fee: float) -> tuple[pd.DataFrame, str]:
-    # Lazy import to avoid circulars if build_trades lives in views_analysis
-    from .views_analysis import build_trades  # noqa: WPS433
-    # Kalman stubs live in strategies.py
-    from .strategies import kalman_cross, kalman_long, kalman_short
+    """
+    Given a sliced/resampled `view`, produce a trades DataFrame and a title
+    for the chosen strategy key. Keeps imports local to avoid circulars.
+    """
+    # NOTE: `fee` here is round-trip (e.g., 0.002). Kalman funcs expect per-side.
+    fee_side = float(fee) / 2.0
+
+    # Lazy import to avoid circular import at module load time
+    from .views_analysis import build_trades  # EMA stack lives there
+    try:
+        # Kalman lives in strategies.py (already added by you)
+        from .strategies import kalman_long, kalman_short, kalman_cross
+    except Exception:
+        kalman_long = kalman_short = kalman_cross = None  # noqa: F841
 
     if strat_key == "ema_stack_long":
         title = "EMA 20/50/100 Stack — Long"
@@ -168,24 +178,89 @@ def build_trades_for_strategy(view: pd.DataFrame, strat_key: str, fee: float) ->
     elif strat_key == "ema_stack_long_short":
         title = "EMA 20/50/100 Stack — Long & Short"
         trades_df = build_trades(view, mode="both", fee=fee)
+
     elif strat_key == "lorentzian_advta":
         title = "Lorentzian Classification — Equity"
         trades_df = lorentzian_trades_advta(view, fee_frac=fee)
-    # === NEW: Kalman strategies (placeholders for now) ===
-    elif strat_key == "kalman_cross":
-        title = "Kalman Cross — Long & Short"
-        trades_df = kalman_flip_trades(view, fee_frac=fee)
-    elif strat_key == "kalman_long":
-        title = "Kalman Cross — Long Only"
-        trades_df = kalman_long_trades(view, fee_frac=fee)
-    elif strat_key == "kalman_short":
-        title = "Kalman Cross — Short Only"
-        trades_df = kalman_short_trades(view, fee_frac=fee)
+
+    elif strat_key in {"kalman_long", "kalman_short", "kalman_cross"}:
+        title_map = {
+            "kalman_long":  "Kalman Cross — Long Only",
+            "kalman_short": "Kalman Cross — Short Only",
+            "kalman_cross": "Kalman Cross — Flip Long/Short",
+        }
+        title = title_map[strat_key]
+
+        v2 = attach_kalman_cols(view)
+        long_mask  = (v2["kal_slope_s"] > v2["kal_slope_l"])
+        short_mask = (v2["kal_slope_s"] < v2["kal_slope_l"])
+        mode = "long" if strat_key == "kalman_long" else ("short" if strat_key == "kalman_short" else "both")
+
+        trades_df = build_trades_from_masks(v2, long_mask, short_mask, mode=mode, fee=fee)
+
+        # 🔧 Ensure the four columns the table expects:
+        trades_df = _attach_trade_stats(v2, trades_df)
+
     else:
+        # fallback keeps old default
         title = "EMA 20/50/100 Stack — Long"
         trades_df = build_trades(view, mode="long", fee=fee)
 
     return (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame(trades_df)), title
+
+
+
+def build_trades_from_masks(view: pd.DataFrame, long_mask: pd.Series, short_mask: pd.Series, *, mode: str = "both", fee: float = 0.002) -> pd.DataFrame:
+    view = _ensure_ts_index(view)
+    idx = view.index
+    close = pd.to_numeric(view["close"], errors="coerce")
+    trades = []
+    pos = 0  # 1 long, -1 short, 0 flat
+    ent_i = None; ent_px = np.nan; bars = 0
+
+    def _append(side, ei, ep, xi, xp, held, reason):
+        gross = (xp / ep) if side == "long" else (ep / xp)
+        net_factor = float(gross * (1.0 - float(fee)))  # one round-trip
+        trades.append({"side": side, "entry_ts": idx[ei], "entry_px": float(ep), "exit_ts": idx[xi], "exit_px": float(xp), "bars_held": int(held), "net_factor": net_factor, "reason": reason})
+
+    for i in range(1, len(idx)):
+        lm = bool(long_mask.iloc[i])
+        sm = bool(short_mask.iloc[i])
+
+        if mode == "long":
+            if pos == 0 and lm:
+                pos, ent_i, ent_px, bars = 1, i, close.iat[i], 0
+            elif pos == 1 and not lm:
+                _append("long", ent_i, ent_px, i, close.iat[i], bars + 1, "break"); pos, ent_i, ent_px, bars = 0, None, np.nan, 0
+            else:
+                if pos: bars += 1
+
+        elif mode == "short":
+            if pos == 0 and sm:
+                pos, ent_i, ent_px, bars = -1, i, close.iat[i], 0
+            elif pos == -1 and not sm:
+                _append("short", ent_i, ent_px, i, close.iat[i], bars + 1, "break"); pos, ent_i, ent_px, bars = 0, None, np.nan, 0
+            else:
+                if pos: bars += 1
+
+        else:  # both (flip)
+            if lm and (pos <= 0):
+                if pos == -1:
+                    _append("short", ent_i, ent_px, i, close.iat[i], bars + 1, "flip")
+                pos, ent_i, ent_px, bars = 1, i, close.iat[i], 0
+            elif sm and (pos >= 0):
+                if pos == 1:
+                    _append("long", ent_i, ent_px, i, close.iat[i], bars + 1, "flip")
+                pos, ent_i, ent_px, bars = -1, i, close.iat[i], 0
+            else:
+                if pos: bars += 1
+
+    df_tr = pd.DataFrame(trades)
+    if df_tr.empty:
+        return pd.DataFrame(columns=["side","entry_ts","entry_px","exit_ts","exit_px","bars_held","net_factor","reason"])
+    return df_tr.sort_values("exit_ts").reset_index(drop=True)
+
+
 
 
 
@@ -599,9 +674,214 @@ def stepwise_equity_from_trades(trades_df: pd.DataFrame, time_index: pd.Series, 
     return pd.Series(eq_vals, index=ti)
 
 
+def _normalize_trade_cols(trades_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Coerce arbitrary trades into the canonical schema expected by the UI:
+    ['side','entry_ts','entry_px','exit_ts','exit_px','bars_held','net_factor','reason']
+    """
+    if trades_df is None or trades_df.empty:
+        return pd.DataFrame(columns=[
+            "side","entry_ts","entry_px","exit_ts","exit_px","bars_held","net_factor","reason"
+        ])
+
+    df = trades_df.copy()
+
+    # Rename common synonyms to canonical names
+    rename = {}
+    if "entry_time"   in df.columns and "entry_ts" not in df.columns:   rename["entry_time"]   = "entry_ts"
+    if "exit_time"    in df.columns and "exit_ts"  not in df.columns:   rename["exit_time"]    = "exit_ts"
+    if "entry"        in df.columns and "entry_ts" not in df.columns:   rename["entry"]        = "entry_ts"
+    if "exit"         in df.columns and "exit_ts"  not in df.columns:   rename["exit"]         = "exit_ts"
+    if "entry_price"  in df.columns and "entry_px" not in df.columns:   rename["entry_price"]  = "entry_px"
+    if "exit_price"   in df.columns and "exit_px"  not in df.columns:   rename["exit_price"]   = "exit_px"
+    if "price_entry"  in df.columns and "entry_px" not in df.columns:   rename["price_entry"]  = "entry_px"
+    if "price_exit"   in df.columns and "exit_px"  not in df.columns:   rename["price_exit"]   = "exit_px"
+    if "n_bars"       in df.columns and "bars_held" not in df.columns:  rename["n_bars"]       = "bars_held"
+    df = df.rename(columns=rename)
+
+    # Ensure required columns exist with correct dtypes
+    for col in ("entry_ts","exit_ts"):
+        if col not in df.columns:
+            df[col] = pd.NaT
+        df[col] = pd.to_datetime(df[col], utc=True, errors="coerce")
+
+    for col in ("entry_px","exit_px"):
+        if col not in df.columns:
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if "side" in df.columns:
+        df["side"] = (
+            df["side"]
+            .astype(str).str.lower()
+            .map({"long":"long","short":"short","1":"long","-1":"short"})
+            .fillna("long")
+        )
+    else:
+        df["side"] = "long"
+
+    if "bars_held" not in df.columns:
+        df["bars_held"] = 0
+    else:
+        df["bars_held"] = pd.to_numeric(df["bars_held"], errors="coerce").fillna(0).astype(int)
+
+    if "net_factor" not in df.columns:
+        # If returns exist in pct terms, convert; else leave NaN (your equity code may recompute anyway)
+        if "ret" in df.columns:
+            df["net_factor"] = 1.0 + pd.to_numeric(df["ret"], errors="coerce")
+        else:
+            df["net_factor"] = np.nan
+
+    if "reason" not in df.columns:
+        df["reason"] = ""
+
+    # It’s fine to keep open trades (NaT exit_ts); but if your equity/table code dislikes them, drop them:
+    # df = df.dropna(subset=["exit_ts","exit_px"])
+
+    return df[["side","entry_ts","entry_px","exit_ts","exit_px","bars_held","net_factor","reason"]].sort_values(
+        ["entry_ts","exit_ts"], na_position="last"
+    ).reset_index(drop=True)
+
+# --- Kalman (Pine-like) on-the-fly ------------------------------------------
+
+def _kalman_filter_series(close: pd.Series, length: int, R: float = 0.01, Q: float = 0.1) -> pd.Series:
+    """Single-state 1D Kalman filter like the Pine snippet (no trend term)."""
+    x = pd.to_numeric(close, errors="coerce").to_numpy(dtype="float64")
+    n = len(x)
+    est = np.empty(n, dtype="float64"); est[:] = np.nan
+    err = 1.0
+    err_meas = R * max(1, int(length))
+    for i in range(n):
+        xi = x[i]
+        if np.isnan(xi):
+            est[i] = est[i-1] if i else np.nan
+            continue
+        if i == 0 or np.isnan(est[i-1]):
+            # Pine uses close[1] seed; we approximate by seeding with current close on first valid.
+            est[i] = xi
+            continue
+        gain = err / (err + err_meas)
+        est[i] = est[i-1] + gain * (xi - est[i-1])
+        err = (1.0 - gain) * err + Q / max(1, int(length))
+    return pd.Series(est, index=close.index)
+
+def attach_kalman_cols(view: pd.DataFrame, *, short_len: int = 50, long_len: int = 150,
+                       slope_ema: int = 5, extra_smooth: int = 12) -> pd.DataFrame:
+    """Append Kalman levels, smoothed slopes, and buy/sell cross flags to `view`."""
+    v = view.copy()
+    # ensure numeric, sorted
+    v = v.sort_values("ts") if "ts" in v.columns else v.sort_index()
+    for c in ("open","high","low","close"):
+        if c in v.columns:
+            v[c] = pd.to_numeric(v[c], errors="coerce")
+
+    k_short = _kalman_filter_series(v["close"], short_len)
+    k_long  = _kalman_filter_series(v["close"], long_len)
+
+    s_raw = k_short - k_short.shift(1)
+    l_raw = k_long  - k_long.shift(1)
+
+    def _ema(s, n):
+        return pd.to_numeric(s, errors="coerce").ewm(span=max(1, int(n)), adjust=False).mean()
+
+    s_ema = _ema(s_raw, slope_ema)
+    l_ema = _ema(l_raw,  slope_ema)
+    s_sm  = _ema(s_ema,  extra_smooth)
+    l_sm  = _ema(l_ema,  extra_smooth)
+
+    buy  = (s_sm.shift(1) <= l_sm.shift(1)) & (s_sm > l_sm)   # fast crosses up
+    sell = (s_sm.shift(1) >= l_sm.shift(1)) & (s_sm < l_sm)   # fast crosses down
+
+    v["kal_s"]        = k_short
+    v["kal_l"]        = k_long
+    v["kal_slope_s"]  = s_sm
+    v["kal_slope_l"]  = l_sm
+    v["kal_buy"]      = buy.fillna(False).astype(bool)
+    v["kal_sell"]     = sell.fillna(False).astype(bool)
+    return v
+
+def _ensure_ts_index(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure a tz-aware DatetimeIndex (UTC). If a 'ts' column exists, parse it and
+    set it as the index. Otherwise validate the existing index.
+    """
+    if "ts" in df.columns:
+        df = df.copy()
+        df["ts"] = pd.to_datetime(df["ts"], utc=True, errors="coerce")
+        df = df.dropna(subset=["ts"]).set_index("ts")
+
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise ValueError("Need a 'ts' column or a DatetimeIndex")
+
+    if df.index.tz is None:
+        df = df.tz_localize("UTC")
+
+    return df
 
 
+def _attach_trade_stats(view: pd.DataFrame, trades_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure the table columns exist for any engine:
+      - pnl_pct, runup_pct, drawdown_pct, cum_pnl_pct
+    Works with either {entry_px, exit_px} or {entry_price, exit_price}.
+    Assumes trades_df has: entry_ts, exit_ts, side, net_factor.
+    """
+    # If empty, just add the columns so the table renders
+    if trades_df is None or trades_df.empty:
+        trades_df = (trades_df if isinstance(trades_df, pd.DataFrame) else pd.DataFrame()).copy()
+        for c in ["pnl_pct","runup_pct","drawdown_pct","cum_pnl_pct"]:
+            trades_df[c] = []
+        return trades_df
 
+    v = view.copy()
+    # Ensure UTC DatetimeIndex for slicing
+    if "ts" in v.columns:
+        v["ts"] = pd.to_datetime(v["ts"], utc=True, errors="coerce")
+        v = v.dropna(subset=["ts"]).set_index("ts").sort_index()
+    if not isinstance(v.index, pd.DatetimeIndex):
+        raise ValueError("view must have 'ts' or a DatetimeIndex")
 
+    # Normalize price column names
+    entry_col = "entry_px" if "entry_px" in trades_df.columns else "entry_price"
+    exit_col  = "exit_px"  if "exit_px"  in trades_df.columns else "exit_price"
+    if entry_col not in trades_df.columns or exit_col not in trades_df.columns:
+        raise KeyError("Trades frame must include entry_px/exit_px (or entry_price/exit_price).")
 
+    # Base P&L in percent from net_factor (already fee-adjusted in your builder)
+    pnl_frac = trades_df["net_factor"].astype(float) - 1.0
+    trades_df = trades_df.copy()
+    trades_df["pnl_pct"] = pnl_frac * 100.0
+
+    # Infer bar indices for MFE/MAE if missing
+    if "entry_idx" not in trades_df.columns or "exit_idx" not in trades_df.columns:
+        idxer = pd.Index(v.index)
+        trades_df["entry_idx"] = idxer.get_indexer(pd.to_datetime(trades_df["entry_ts"], utc=True), method="nearest")
+        trades_df["exit_idx"]  = idxer.get_indexer(pd.to_datetime(trades_df["exit_ts"],  utc=True), method="nearest")
+
+    highs = v["high"].to_numpy() if "high" in v.columns else v["close"].to_numpy()
+    lows  = v["low"].to_numpy()  if "low"  in v.columns else v["close"].to_numpy()
+
+    runups, drawdns = [], []
+    for entry_i, exit_i, side, entry_px in zip(
+        trades_df["entry_idx"].to_numpy(),
+        trades_df["exit_idx"].to_numpy(),
+        trades_df["side"].to_numpy(),
+        trades_df[entry_col].to_numpy(),
+    ):
+        i0 = int(min(entry_i, exit_i)); i1 = int(max(entry_i, exit_i))
+        h_slice = highs[i0:i1+1]; l_slice = lows[i0:i1+1]
+        if side == "long":
+            mfe = (np.max(h_slice) / entry_px) - 1.0
+            mae = (np.min(l_slice) / entry_px) - 1.0
+        else:
+            mfe = (entry_px / np.min(l_slice)) - 1.0
+            mae = (entry_px / np.max(h_slice)) - 1.0
+        runups.append(mfe * 100.0); drawdns.append(mae * 100.0)
+
+    trades_df["runup_pct"]    = pd.Series(runups, index=trades_df.index).astype(float)
+    trades_df["drawdown_pct"] = pd.Series(drawdns, index=trades_df.index).astype(float)
+
+    # Compounded cumulative (%)
+    trades_df["cum_pnl_pct"] = ((1.0 + pnl_frac).cumprod() - 1.0) * 100.0
+    return trades_df
 
