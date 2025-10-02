@@ -31,17 +31,61 @@ SYMBOL_MAP = {
 def _csv_path(symbol_key: str) -> Path:
     return DATA_DIR / f"{symbol_key.lower()}usd_5m_coinbase.csv"
 
-def _load_basic_df(csv_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(csv_path, dtype={"asset": "string", "source": "string"}, low_memory=False)
-    # timestamp (ET-naive)
-    df["ts"] = pd.to_datetime(df["date"] + " " + df["time"], errors="coerce")
-    # numeric
-    for c in ("open","high","low","close","volume","ema20","ema50","ema100"):
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-    # clean
-    df = df.dropna(subset=["ts","open","high","low","close"]).sort_values("ts").reset_index(drop=True)
-    return df
+# --- tolerant CSV loader: supports {ts} OR {date,time} OR any datetime-like col ---
+def _load_basic_df(path: Path) -> pd.DataFrame:
+    import pandas as pd
+    from pandas.api.types import is_datetime64tz_dtype
+
+    df = pd.read_csv(path)
+
+    colmap = {c.lower(): c for c in df.columns}
+    def pick(*names):
+        for n in names:
+            if n in colmap: return colmap[n]
+        return None
+
+    if "ts" in df.columns:
+        ts = pd.to_datetime(df["ts"], utc=True, errors="coerce")
+    elif {"date", "time"}.issubset({c.lower() for c in df.columns}):
+        date_col = pick("date")
+        time_col = pick("time")
+        ts = pd.to_datetime(df[date_col] + " " + df[time_col], utc=True, errors="coerce")
+    else:
+        ts = None
+        for c in df.columns:
+            s = pd.to_datetime(df[c], utc=True, errors="coerce")
+            if s.notna().any():
+                ts = s
+                break
+        if ts is None:
+            raise ValueError("CSV must contain 'ts' or 'date'+'time' (or a datetime-like column).")
+
+    df = df.assign(ts=ts).dropna(subset=["ts"])
+
+    open_col  = pick("open")  or "open"
+    high_col  = pick("high")  or pick("close") or "close"
+    low_col   = pick("low")   or pick("close") or "close"
+    close_col = pick("close") or "close"
+    vol_col   = pick("volume") or pick("vol") or None
+
+    out = pd.DataFrame({
+        "ts": df["ts"],
+        "open":  df[open_col]  if open_col  in df.columns else df[close_col],
+        "high":  df[high_col]  if high_col  in df.columns else df[close_col],
+        "low":   df[low_col]   if low_col   in df.columns else df[close_col],
+        "close": df[close_col] if close_col in df.columns else df.iloc[:, 0],
+    })
+    if vol_col and vol_col in df.columns:
+        out["volume"] = df[vol_col]
+
+    out = out.sort_values("ts").reset_index(drop=True)
+
+    # ✅ Make timestamps tz-naive but in UTC (avoids tz-aware/naive comparison errors)
+    if is_datetime64tz_dtype(out["ts"]):
+        out["ts"] = out["ts"].dt.tz_convert("UTC").dt.tz_localize(None)
+
+    return out
+
 
 def _render_plot_html(fig: go.Figure, page_title: str) -> HttpResponse:
     # Use Plotly's built-in serializer
@@ -129,10 +173,18 @@ def _read_log(path: str, max_bytes: int = 20000) -> str:
 
 def analysis_candles(request, symbol_key: str):
     symbol_key = (symbol_key or "").upper()
-    if symbol_key not in SYMBOL_MAP:
-        return HttpResponseBadRequest("Unsupported symbol")
 
-    csv_path = _csv_path(symbol_key)
+    # --- Resolve CSV path (crypto via SYMBOL_MAP; otherwise treat as stock) ---
+    if symbol_key in SYMBOL_MAP:
+        csv_path = _csv_path(symbol_key)
+        display = f"{symbol_key}/USD"
+    else:
+        p = _find_csv_for_symbol(symbol_key, asset="stock")
+        if p is None:
+            return HttpResponseBadRequest("CSV not found for symbol. Click 'Get CSV' first.")
+        csv_path = p
+        display = symbol_key  # neutral label for stocks
+
     if not csv_path.exists():
         return HttpResponseBadRequest(f"CSV not found for {symbol_key}. Click 'Get CSV' first.")
 
@@ -149,16 +201,17 @@ def analysis_candles(request, symbol_key: str):
     fig = go.Figure()
     fig.add_trace(go.Candlestick(
         x=tail["ts"], open=tail["open"], high=tail["high"], low=tail["low"], close=tail["close"],
-        name=f"{symbol_key}/USD"
+        name=display
     ))
 
-    # Optional EMAs if present
+    # Optional EMAs if present (unchanged)
     for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
         if col in tail.columns and tail[col].notna().any():
             fig.add_trace(go.Scatter(x=tail["ts"], y=tail[col], mode="lines", name=label))
 
+    # Keep existing styling (unchanged)
     fig.update_layout(
-        title=f"{symbol_key}/USD — last {len(tail)} × 5m candles",
+        title=f"{display} — last {len(tail)} × 5m candles",
         xaxis_rangeslider_visible=True,
         hovermode="x unified",
         margin=dict(l=40, r=20, t=50, b=30),
@@ -169,13 +222,22 @@ def analysis_candles(request, symbol_key: str):
 
     return _render_plot_html(fig, f"{symbol_key} Candles")
 
+
 def analysis_cumprofit(request, symbol_key: str):
     """Simple buy-and-hold cumulative profit curve from close-to-close returns."""
     symbol_key = (symbol_key or "").upper()
-    if symbol_key not in SYMBOL_MAP:
-        return HttpResponseBadRequest("Unsupported symbol")
 
-    csv_path = _csv_path(symbol_key)
+    # --- Resolve CSV path (crypto via SYMBOL_MAP; otherwise treat as stock) ---
+    if symbol_key in SYMBOL_MAP:
+        csv_path = _csv_path(symbol_key)
+        display = f"{symbol_key}/USD"
+    else:
+        p = _find_csv_for_symbol(symbol_key, asset="stock")
+        if p is None:
+            return HttpResponseBadRequest("CSV not found for symbol. Click 'Get CSV' first.")
+        csv_path = p
+        display = symbol_key  # neutral label for stocks
+
     if not csv_path.exists():
         return HttpResponseBadRequest(f"CSV not found for {symbol_key}. Click 'Get CSV' first.")
 
@@ -184,6 +246,7 @@ def analysis_cumprofit(request, symbol_key: str):
     # cumulative buy & hold % return
     df["ret"] = df["close"].pct_change().fillna(0.0)
     df["cum"] = (1.0 + df["ret"]).cumprod() - 1.0  # fraction
+
     # allow ?n= to control window shown
     try:
         N = int(request.GET.get("n", "5000"))
@@ -197,7 +260,7 @@ def analysis_cumprofit(request, symbol_key: str):
         mode="lines", name="Cumulative % (buy & hold)"
     ))
     fig.update_layout(
-        title=f"{symbol_key}/USD — Buy & Hold Cumulative Return (last {len(tail)} bars)",
+        title=f"{display} — Buy & Hold Cumulative Return (last {len(tail)} bars)",
         xaxis_rangeslider_visible=True,
         hovermode="x unified",
         margin=dict(l=40, r=20, t=50, b=30),
@@ -206,6 +269,7 @@ def analysis_cumprofit(request, symbol_key: str):
     )
     fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
     return _render_plot_html(fig, f"{symbol_key} Cumulative Profit")
+
 
 
 def stepwise_equity_from_trades(trades_df, time_index, start_value=1.0):
@@ -468,26 +532,30 @@ def analysis_all(request, symbol_key: str):
     except Exception:
         fee = float(FEE_DEFAULT)
 
-    # symbol
+    # ---- symbol (crypto map OR stock fallback) ----
     symbol_key = (symbol_key or "").upper()
-    if symbol_key not in SYMBOL_MAP:
-        return HttpResponseBadRequest("Unsupported symbol")
+    if symbol_key in SYMBOL_MAP:
+        csv_path = _csv_path(symbol_key)                       # crypto path (unchanged)
+    else:
+        p = _find_csv_for_symbol(symbol_key, asset="stock")    # <-- stock CSV discovery
+        if p is None:
+            return HttpResponseBadRequest("CSV not found for symbol. Click 'Get CSV' first.")
+        csv_path = p
 
     # data
-    csv_path = _csv_path(symbol_key)
     if not csv_path.exists():
         return HttpResponseBadRequest(f"CSV not found for {symbol_key}. Click 'Get CSV' first.")
     df = _load_basic_df(csv_path)
     if df.empty or df["ts"].isna().all():
         return HttpResponseBadRequest("No data in CSV.")
 
-    # timeframe & window
+    # timeframe & window (unchanged)
     tf = (request.GET.get("tf") or "5m").lower()
     tf = tf if tf in {"5m", "1h", "4h", "1d"} else "5m"
     window = compute_period_window(df, request.GET.get("start"), request.GET.get("end"))
     view = slice_and_resample(df, window, tf)
 
-    # strategies (rolled back to 4 options)
+    # strategies (rolled back to 4 options) (unchanged)
     allowed = {
         "ema_stack_long", "ema_stack_short", "ema_stack_long_short",
         "lorentzian_advta", "kalman_cross","kalman_long","kalman_short"}
@@ -497,29 +565,29 @@ def analysis_all(request, symbol_key: str):
 
     trades_df, strat_title = build_trades_for_strategy(view, strat_key, fee)
 
-    # figures
+    # figures (unchanged)
     fig_c = make_candle_fig(view, symbol_key, window, tf)
     fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
 
-    # overlay markers for LC only
+    # overlay markers for LC only (unchanged)
     if strat_key == "lorentzian_advta":
         add_markers_to_candle(fig_c, view, trades_df)
 
-    # table + js
+    # table + js (unchanged)
     table_html = trades_table_html(trades_df)
     js_interactions = trades_table_js(BAR_MS_MAP[tf], pre_bars=36)
 
-    # jsonify figs
+    # jsonify figs (unchanged)
     fig_c_json = fig_c.to_json()
     fig_p_json = fig_p.to_json()
 
-    # jupyter link
+    # jupyter link (unchanged)
     start_val = window.start_period.strftime("%Y-%m")
     end_val   = window.end_period.strftime("%Y-%m")
     nb_base = request.build_absolute_uri(reverse("analysis_to_jupyter", args=[symbol_key]))
     jupyter_url = f"{nb_base}?start={start_val}&end={end_val}&tf={tf}&strat={strat_key}&fee={fee:.6f}"
 
-    # dropdown selections
+    # dropdown selections (unchanged)
     sel_long  = "selected" if strat_key == "ema_stack_long" else ""
     sel_short = "selected" if strat_key == "ema_stack_short" else ""
     sel_both  = "selected" if strat_key == "ema_stack_long_short" else ""
