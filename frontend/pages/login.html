@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Login</title>
+    <!-- Use the unified stylesheet -->
+    <link rel="stylesheet" href="/static/css/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+
+  <body>
+    <!-- Optional top bar -->
+    <div class="navbar">
+      <div class="inner">
+        <div class="brand">LMS</div>
+        <div class="actions">
+          <a class="btn secondary" href="/dashboard">Dashboard</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="header">
+        <h1>Welcome back</h1>
+      </div>
+
+      <div class="card center">
+        <form id="login-form" action="/api/signin/" method="post">
+          <div class="form-row">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username" required />
+          </div>
+
+          <div class="form-row">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </div>
+
+          <div class="form-row mt-16">
+            <button class="btn" type="submit">Log in</button>
+          </div>
+
+          <p class="help mt-8" id="status"></p>
+
+          <p class="mt-16">
+            <span class="help">Don’t have an account?</span>
+            <a class="btn-link" href="/signup">Create an account</a>
+          </p>
+        </form>
+      </div>
+    </div>
+
+    <script src="/static/login.js"></script>
+  </body>
+</html>
+

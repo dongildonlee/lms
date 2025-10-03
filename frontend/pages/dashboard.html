@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard</title>
+  <style>
+    body {
+      font-family: system-ui;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #f8f9fa;
+    }
+    h1, p {
+      text-align: center;
+    }
+    .actions {
+      display: flex;
+      gap: 20px;
+      margin-top: 24px;
+    }
+    .btn {
+      padding: 12px 28px;
+      font-size: 18px;
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      background-color: #007bff;
+      color: white;
+      transition: background 0.2s ease-in-out;
+    }
+    .btn:hover {
+      background-color: #0056b3;
+    }
+    a {
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+  <p>You are logged in as superuser: <strong>{{ request.user.username }}</strong></p>
+
+  <div class="actions">
+    <a href="/investments"><button type="button" class="btn">Crypto</button></a>
+    <a href="/stocks"><button type="button" class="btn">Stocks</button></a>
+  </div>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</body>
+</html>
+

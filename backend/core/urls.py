@@ -18,20 +18,27 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from .views import home_page, login_page, signup_page, dashboard, investments_page, stocks_page
+from django.views.generic import RedirectView
+from .views import home_page, login_page, signup_page, dashboard, crypto_page, stocks_page
 
 urlpatterns = [
     path("", home_page, name="home"),
     path("home/", home_page, name="home"),
     path("login/", login_page, name="login"),
     path("signup/", signup_page, name="signup"),
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
     path("api/", include("accounts.urls")),
     path("dashboard/", dashboard, name="dashboard"),
-    path("investments/", investments_page, name="investments"),
-    path("stocks/", stocks_page, name="stocks")
+
+    # ✅ new canonical crypto route
+    path("crypto/", crypto_page, name="crypto"),
+
+    # ♻️ legacy path redirect (safe to remove later)
+    path("investments/", RedirectView.as_view(url="/crypto/", permanent=True), name="investments_legacy"),
+
+    path("stocks/", stocks_page, name="stocks"),
 ]
 
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL,
-                          document_root=settings.STATICFILES_DIRS[0])
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
+

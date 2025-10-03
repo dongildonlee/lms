@@ -13,7 +13,7 @@ from urllib.parse import quote
 import importlib.util
 from .analysis_helpers import add_markers_to_candle, build_trades_for_strategy
 from . import views_data
-
+from django.utils import timezone
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -338,128 +338,82 @@ def _mfe_mae(view, side: str, entry_i: int, exit_i: int, entry_px: float) -> tup
 #         "drawdown_pct": mae,
 #     })
 
-def _stack_masks(view):
-    long_stack  = ((view["ema20"] > view["ema50"]) & (view["ema50"] > view["ema100"])).fillna(False)
-    short_stack = ((view["ema20"] < view["ema50"]) & (view["ema50"] < view["ema100"])).fillna(False)
-    return long_stack, short_stack
-
-def _finalize_trades(trades: list) -> pd.DataFrame:
-    tdf = pd.DataFrame(trades)
-    if not tdf.empty:
-        tdf["entry_ts"] = pd.to_datetime(tdf["entry_ts"])
-        tdf["exit_ts"]  = pd.to_datetime(tdf["exit_ts"])
-
-        # net P&L is already fee-adjusted in pnl_pct; convert to fraction
-        tdf["pnl_frac"] = tdf["pnl_pct"].astype(float) / 100.0
-
-        # COMPOUNDED cumulative, mirrors TradingView equity logic:
-        # equity_n = equity_0 * Π(1 + pnl_i)
-        tdf["cum_frac"] = (1.0 + tdf["pnl_frac"]).cumprod() - 1.0
-        tdf["cum_pnl_pct"] = tdf["cum_frac"] * 100.0
-    return tdf
 
 
-def _append_trade(trades: list, view, side: str, entry_i: int, exit_i: int, fee: float):
-    # TradingView-style fills: entry at next bar OPEN, exit at flip bar CLOSE
-    entry_px = float(view["open"].iat[entry_i])
-    exit_px  = float(view["close"].iat[exit_i])
 
-    pnl_frac = _pnl_long(entry_px, exit_px, fee) if side == "long" else _pnl_short(entry_px, exit_px, fee)
+# # ===== One generic builder =====
+# def build_trades(view: pd.DataFrame, *, mode: str, fee: float) -> pd.DataFrame:
+#     """
+#     mode: 'long', 'short', or 'both'
+#     TradingView-like execution:
+#       - detect flip on bar i
+#       - EXIT on bar i CLOSE
+#       - ENTER on bar i+1 OPEN (if a stack is ON)
+#     """
+#     long_stack, short_stack = _stack_masks(view)
+#     N = len(view)
+#     if N < 2:
+#         return pd.DataFrame()
 
-    # window used for MFE/MAE (from entry bar through exit bar inclusive)
-    win = view.iloc[entry_i:exit_i+1]
-    if side == "long":
-        mfe = (win["high"].max() / entry_px - 1.0) * 100.0
-        mae = (win["low"].min()  / entry_px - 1.0) * 100.0
-    else:
-        mfe = (entry_px / win["low"].min()  - 1.0) * 100.0
-        mae = (entry_px / win["high"].max() - 1.0) * 100.0
+#     def _enter_idx(i_flip: int) -> int | None:
+#         j = i_flip + 1
+#         return j if j < N else None  # need a next bar to enter
 
-    trades.append({
-        "side": side,
-        "entry_ts": view["ts"].iat[entry_i],
-        "exit_ts":  view["ts"].iat[exit_i],
-        "entry_px": entry_px,
-        "exit_px":  exit_px,
-        "pnl_pct":  pnl_frac * 100.0,
-        "runup_pct": mfe,
-        "drawdown_pct": mae,
-    })
+#     trades: list[dict] = []
 
+#     if mode in {"long", "short"}:
+#         stack = long_stack if mode == "long" else short_stack
+#         in_pos, entry_i = False, None
 
-# ===== One generic builder =====
-def build_trades(view: pd.DataFrame, *, mode: str, fee: float) -> pd.DataFrame:
-    """
-    mode: 'long', 'short', or 'both'
-    TradingView-like execution:
-      - detect flip on bar i
-      - EXIT on bar i CLOSE
-      - ENTER on bar i+1 OPEN (if a stack is ON)
-    """
-    long_stack, short_stack = _stack_masks(view)
-    N = len(view)
-    if N < 2:
-        return pd.DataFrame()
+#         for i in range(N):  # i is the bar we *observe*
+#             turn_on  = bool(stack.iat[i]) and (not bool(stack.iat[i-1]) if i > 0 else True)
+#             turn_off = (not bool(stack.iat[i])) and (bool(stack.iat[i-1]) if i > 0 else False)
 
-    def _enter_idx(i_flip: int) -> int | None:
-        j = i_flip + 1
-        return j if j < N else None  # need a next bar to enter
+#             if not in_pos and turn_on:
+#                 j = _enter_idx(i)
+#                 if j is not None:
+#                     in_pos, entry_i = True, j
 
-    trades: list[dict] = []
+#             elif in_pos and turn_off:
+#                 _append_trade(trades, view, mode, entry_i, i, fee)
+#                 in_pos, entry_i = False, None
 
-    if mode in {"long", "short"}:
-        stack = long_stack if mode == "long" else short_stack
-        in_pos, entry_i = False, None
+#         # If still in position at the very end, liquidate on the *last* bar close
+#         if in_pos and entry_i is not None:
+#             _append_trade(trades, view, mode, entry_i, N - 1, fee)
 
-        for i in range(N):  # i is the bar we *observe*
-            turn_on  = bool(stack.iat[i]) and (not bool(stack.iat[i-1]) if i > 0 else True)
-            turn_off = (not bool(stack.iat[i])) and (bool(stack.iat[i-1]) if i > 0 else False)
+#         return _finalize_trades(trades)
 
-            if not in_pos and turn_on:
-                j = _enter_idx(i)
-                if j is not None:
-                    in_pos, entry_i = True, j
+#     # ---- mode == "both": flip between sides with TV-style scheduling ----
+#     side, entry_i = None, None
 
-            elif in_pos and turn_off:
-                _append_trade(trades, view, mode, entry_i, i, fee)
-                in_pos, entry_i = False, None
+#     for i in range(N):
+#         want_long, want_short = bool(long_stack.iat[i]), bool(short_stack.iat[i])
 
-        # If still in position at the very end, liquidate on the *last* bar close
-        if in_pos and entry_i is not None:
-            _append_trade(trades, view, mode, entry_i, N - 1, fee)
+#         if side is None:
+#             # schedule an entry for next bar’s open if any stack is ON now
+#             if want_long or want_short:
+#                 j = _enter_idx(i)
+#                 if j is not None:
+#                     side, entry_i = ("long" if want_long else "short"), j
 
-        return _finalize_trades(trades)
+#         else:
+#             # need to close current side on this bar's close?
+#             need_close = (side == "long" and not want_long) or (side == "short" and not want_short)
+#             if need_close:
+#                 _append_trade(trades, view, side, entry_i, i, fee)
+#                 side, entry_i = None, None
+#                 # if the opposite stack is ON already on this bar, schedule a new entry for next open
+#                 if want_long or want_short:
+#                     j = _enter_idx(i)
+#                     if j is not None:
+#                         side, entry_i = ("long" if want_long else "short"), j
 
-    # ---- mode == "both": flip between sides with TV-style scheduling ----
-    side, entry_i = None, None
+#     # liquidate any open position on the last bar's close
+#     if side is not None and entry_i is not None:
+#         _append_trade(trades, view, side, entry_i, N - 1, fee)
 
-    for i in range(N):
-        want_long, want_short = bool(long_stack.iat[i]), bool(short_stack.iat[i])
-
-        if side is None:
-            # schedule an entry for next bar’s open if any stack is ON now
-            if want_long or want_short:
-                j = _enter_idx(i)
-                if j is not None:
-                    side, entry_i = ("long" if want_long else "short"), j
-
-        else:
-            # need to close current side on this bar's close?
-            need_close = (side == "long" and not want_long) or (side == "short" and not want_short)
-            if need_close:
-                _append_trade(trades, view, side, entry_i, i, fee)
-                side, entry_i = None, None
-                # if the opposite stack is ON already on this bar, schedule a new entry for next open
-                if want_long or want_short:
-                    j = _enter_idx(i)
-                    if j is not None:
-                        side, entry_i = ("long" if want_long else "short"), j
-
-    # liquidate any open position on the last bar's close
-    if side is not None and entry_i is not None:
-        _append_trade(trades, view, side, entry_i, N - 1, fee)
-
-    return _finalize_trades(trades)
+#     return _finalize_trades(trades)
 
 
 
@@ -1405,51 +1359,96 @@ def _latest_ts_from_csv(path: Path) -> pd.Timestamp | None:
             return s.dropna().iloc[-1]
     return None
 
+# backend/accounts/views_analysis.py  (or wherever the view lives)
+from pathlib import Path
+import pandas as pd
+from django.http import JsonResponse
+from django.utils import timezone
+
 def analysis_check_csv(request, symbol: str):
     """
     GET /api/analysis/check_csv/<symbol>/?asset=crypto|stock&min_rows=500&fresh_hours=48
     Returns: { ok, exists, path, rows, latest_ts, fresh, reason }
     """
-    asset = request.GET.get("asset", "").lower() or None
+    asset = (request.GET.get("asset", "") or "").lower() or None
     min_rows = int(request.GET.get("min_rows", "100"))
     fresh_hours = int(request.GET.get("fresh_hours", "48"))
 
-    path = _find_csv_for_symbol(symbol, asset=asset)
+    path = _find_csv_for_symbol(symbol, asset=asset)  # your existing helper
     if path is None:
-        return JsonResponse({
-            "ok": False, "exists": False, "reason": "No CSV found for symbol."
-        }, status=404)
+        return JsonResponse(
+            {"ok": False, "exists": False, "reason": "No CSV found for symbol."},
+            status=404,
+        )
 
-    # quick sanity checks
+    path = Path(path)
+
+    # ---- quick line count (header-aware) ------------------------------------
     try:
-        # Try to get last ts quickly and row count
-        rows = sum(1 for _ in open(path, "r", encoding="utf-8", errors="ignore")) - 1  # minus header
+        with path.open("r", encoding="utf-8", errors="ignore") as f:
+            rows = sum(1 for _ in f) - 1  # minus header
+        if rows < 0:
+            rows = 0
     except Exception:
         rows = None
 
-    latest_ts = _latest_ts_from_csv(path)
-    now = pd.Timestamp.utcnow()
-    fresh = (latest_ts is not None) and ((now - latest_ts) <= pd.Timedelta(hours=fresh_hours))
+    # ---- latest timestamp (coerce to UTC-aware) -----------------------------
+    latest_ts = _latest_ts_from_csv(path)  # may return str/naive/aware
+    if latest_ts is not None:
+        latest_ts = pd.Timestamp(latest_ts)
+        if latest_ts.tzinfo is None or latest_ts.tz is None:
+            latest_ts = latest_ts.tz_localize("UTC")
+        else:
+            latest_ts = latest_ts.tz_convert("UTC")
 
+    # Use Django-aware 'now' (UTC) and convert to pandas Timestamp in UTC
+    now_pd = pd.Timestamp(timezone.now()).tz_convert("UTC")
+
+    fresh = (latest_ts is not None) and (
+        (now_pd - latest_ts) <= pd.Timedelta(hours=fresh_hours)
+    )
+
+    latest_iso = None if latest_ts is None else latest_ts.isoformat()
+
+    # ---- size check ---------------------------------------------------------
     if rows is None or rows < min_rows:
-        return JsonResponse({
-            "ok": False, "exists": True, "path": str(path),
-            "rows": rows, "latest_ts": (None if latest_ts is None else latest_ts.isoformat()),
-            "fresh": bool(fresh),
-            "reason": f"CSV too small: need >= {min_rows} rows."
-        }, status=409)
+        return JsonResponse(
+            {
+                "ok": False,
+                "exists": True,
+                "path": str(path),
+                "rows": rows,
+                "latest_ts": latest_iso,
+                "fresh": bool(fresh),
+                "reason": f"CSV too small: need >= {min_rows} rows.",
+            },
+            status=409,
+        )
 
+    # ---- freshness check ----------------------------------------------------
     if not fresh:
-        return JsonResponse({
-            "ok": False, "exists": True, "path": str(path),
-            "rows": rows, "latest_ts": (None if latest_ts is None else latest_ts.isoformat()),
-            "fresh": False,
-            "reason": f"CSV not fresh (>{fresh_hours}h old)."
-        }, status=409)
+        return JsonResponse(
+            {
+                "ok": False,
+                "exists": True,
+                "path": str(path),
+                "rows": rows,
+                "latest_ts": latest_iso,
+                "fresh": False,
+                "reason": f"CSV not fresh (>{fresh_hours}h old).",
+            },
+            status=409,
+        )
 
-    return JsonResponse({
-        "ok": True, "exists": True, "path": str(path),
-        "rows": rows, "latest_ts": latest_ts.isoformat(),
-        "fresh": True
-    })
+    # ---- all good -----------------------------------------------------------
+    return JsonResponse(
+        {
+            "ok": True,
+            "exists": True,
+            "path": str(path),
+            "rows": rows,
+            "latest_ts": latest_iso,
+            "fresh": True,
+        }
+    )
 

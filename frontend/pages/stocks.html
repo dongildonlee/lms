@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stocks</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body { font-family: system-ui; padding: 24px; }
+    h1 { margin: 0 0 12px 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: 10px; text-align: left; }
+    .actions a { margin-right: 8px; }
+    .container { max-width: 880px; margin: 40px auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Stocks</h1>
+      <div class="actions">
+        <a class="btn secondary" href="/dashboard">← Back to dashboard</a>
+      </div>
+    </div>
+  
+    <p>Pick a ticker to open charts/analysis.</p>
+  
+    <table id="tbl-stocks">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th class="actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-stocks"></tbody>
+    </table>
+  
+    <!-- keep these where they are if you don’t want to edit <head> right now -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/stocks.js"></script>
+  </div>  
+</body>
+</html>

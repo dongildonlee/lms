@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Crypto</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <style>
+    /* keep page-self-contained in case styles.css changes later */
+    .container { max-width: 880px; margin: 40px auto; padding: 0 20px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    th, td { padding: 12px 14px; text-align: left; border-bottom:1px solid rgba(255,255,255,.06) }
+    th { color: var(--muted); font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.4px }
+    .actions a { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Crypto</h1>
+      <div class="actions">
+        <a class="btn secondary" href="/dashboard">← Back to dashboard</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="mt-8" style="color:var(--muted)">Click any action; we’ll verify and auto-update CSV data if needed before opening charts.</p>
+      <div class="table-wrap mt-16">
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th class="actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-crypto"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="/static/js/crypto.js"></script>
+</body>
+</html>
+

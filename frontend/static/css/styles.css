@@ -1,0 +1,108 @@
+/* ===== Base: font, colors, layout ===== */
+:root{
+    --bg:#0b1020;            /* deep navy */
+    --panel:#121832;         /* card background */
+    --muted:#8fa1c7;         /* secondary text */
+    --text:#e6ecff;          /* primary text */
+    --accent:#6aa2ff;        /* primary accent */
+    --accent-2:#5eead4;      /* mint accent */
+    --danger:#ef4444;        /* error */
+    --ok:#22c55e;            /* success */
+    --ring: rgba(106,162,255,.35);
+    --radius:16px;
+    --shadow: 0 8px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, "Helvetica Neue", Arial;
+    color:var(--text); background: radial-gradient(1200px 800px at 10% -10%, #172349 0%, #0b1020 55%) fixed;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{opacity:.9; text-decoration:underline}
+  
+  /* ===== Layout container ===== */
+  .container{
+    max-width: 1080px; margin: 40px auto; padding: 0 20px;
+  }
+  .header{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    margin-bottom: 24px;
+  }
+  .header h1{
+    font-size: 22px; font-weight:700; letter-spacing:.3px; margin:0;
+  }
+  .header .actions{display:flex; gap:8px}
+  
+  /* ===== Card / panel ===== */
+  .card{
+    background: var(--panel); border:1px solid rgba(255,255,255,.06);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 18px 20px; margin: 16px 0;
+  }
+  
+  /* ===== Buttons ===== */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding: 10px 14px; border-radius: 12px; border:1px solid transparent;
+    background: linear-gradient(180deg, var(--accent), #4b7fe6);
+    color:#07111f; font-weight:700; letter-spacing:.2px; cursor:pointer;
+    transition: transform .06s ease, box-shadow .2s ease, filter .2s ease;
+    box-shadow: 0 8px 18px rgba(106,162,255,.35);
+  }
+  .btn:hover{ filter:saturate(1.05) }
+  .btn:active{ transform: translateY(1px) }
+  .btn.secondary{
+    background: linear-gradient(180deg, #202a52, #1a2446);
+    color:var(--text); border-color: rgba(255,255,255,.08);
+    box-shadow: none;
+  }
+  .btn.danger{ background: linear-gradient(180deg, #ff6a6a, #e54b4b); color:#1b0c0c }
+  
+  /* Link-styled button */
+  .btn-link{ background:none; border:none; padding:0; color:var(--accent); cursor:pointer; font-weight:600 }
+  .btn-link:hover{text-decoration:underline}
+  
+  /* ===== Forms (login) ===== */
+  form{ width:100%; max-width:480px }
+  .form-row{ display:flex; flex-direction:column; gap:6px; margin:12px 0 }
+  label{ color: var(--muted); font-weight:600; font-size:13px }
+  input, select{
+    width:100%; background:#0d142b; color:var(--text);
+    border:1px solid rgba(255,255,255,.08); border-radius:12px;
+    padding:12px 12px; outline:none; transition: border .15s ease, box-shadow .15s ease;
+  }
+  input:focus, select:focus{ border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring) }
+  .help{ color: var(--muted); font-size:12px; margin-top:6px }
+  
+  /* ===== Tables (stocks & crypto lists) ===== */
+  .table-wrap{ overflow:auto; border-radius: 14px; border:1px solid rgba(255,255,255,.06) }
+  table{ width:100%; border-collapse:collapse; background: var(--panel) }
+  th, td{ padding: 12px 14px; text-align:left; border-bottom:1px solid rgba(255,255,255,.06) }
+  th{ color: var(--muted); font-weight:700; font-size:13px; text-transform: uppercase; letter-spacing:.4px }
+  tbody tr:hover{ background: rgba(255,255,255,.04) }
+  
+  /* ===== Pills & badges ===== */
+  .pill{
+    display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
+    background:#0f1834; border:1px solid rgba(255,255,255,.08);
+    color:var(--muted); border-radius:999px; font-size:12px; font-weight:600;
+  }
+  .pill.ok{ color:#052814; background: linear-gradient(180deg, #5ef0c8, #22c55e); border: none }
+  .pill.warn{ color:#2a120f; background: linear-gradient(180deg, #ffd29e, #f59e0b); border: none }
+  
+  /* ===== Utility spacing ===== */
+  .row{ display:flex; flex-wrap:wrap; gap:16px }
+  .col{ flex:1 1 320px }
+  .mt-8{ margin-top:8px } .mt-16{ margin-top:16px } .mt-24{ margin-top:24px } .mt-32{ margin-top:32px }
+  .center{ display:flex; align-items:center; justify-content:center }
+  
+  /* ===== Small header bar (optional) ===== */
+  .navbar{
+    width:100%; position:sticky; top:0; z-index:5;
+    background: rgba(7,10,24,.65); backdrop-filter: blur(10px);
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .navbar .inner{ max-width:1080px; margin:0 auto; padding:10px 20px; display:flex; align-items:center; justify-content:space-between }
+  .brand{ font-weight:800; letter-spacing:.4px }
+  

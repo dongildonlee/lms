@@ -6,7 +6,13 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import Tuple
 import plotly.graph_objects as go
-from .strategy_lorentzian import lorentzian_trades_advta
+from .strategies.lorentzian import lorentzian_trades_advta
+from .strategies.kalman import (
+    attach_kalman_cols,
+    build_trades_from_masks,
+    kalman_long, kalman_short, kalman_cross,  # optional wrappers
+)
+
 import mplfinance as mpf
 
 
@@ -162,10 +168,12 @@ def build_trades_for_strategy(view: pd.DataFrame, strat_key: str, fee: float) ->
     fee_side = float(fee) / 2.0
 
     # Lazy import to avoid circular import at module load time
-    from .views_analysis import build_trades  # EMA stack lives there
+    from .strategies.ema_stack import build_trades  # EMA stack lives there
+    
     try:
         # Kalman lives in strategies.py (already added by you)
-        from .strategies import kalman_long, kalman_short, kalman_cross
+        from .strategies.kalman import kalman_long, kalman_short, kalman_cross
+    
     except Exception:
         kalman_long = kalman_short = kalman_cross = None  # noqa: F841
 
@@ -210,55 +218,55 @@ def build_trades_for_strategy(view: pd.DataFrame, strat_key: str, fee: float) ->
 
 
 
-def build_trades_from_masks(view: pd.DataFrame, long_mask: pd.Series, short_mask: pd.Series, *, mode: str = "both", fee: float = 0.002) -> pd.DataFrame:
-    view = _ensure_ts_index(view)
-    idx = view.index
-    close = pd.to_numeric(view["close"], errors="coerce")
-    trades = []
-    pos = 0  # 1 long, -1 short, 0 flat
-    ent_i = None; ent_px = np.nan; bars = 0
+# def build_trades_from_masks(view: pd.DataFrame, long_mask: pd.Series, short_mask: pd.Series, *, mode: str = "both", fee: float = 0.002) -> pd.DataFrame:
+#     view = _ensure_ts_index(view)
+#     idx = view.index
+#     close = pd.to_numeric(view["close"], errors="coerce")
+#     trades = []
+#     pos = 0  # 1 long, -1 short, 0 flat
+#     ent_i = None; ent_px = np.nan; bars = 0
 
-    def _append(side, ei, ep, xi, xp, held, reason):
-        gross = (xp / ep) if side == "long" else (ep / xp)
-        net_factor = float(gross * (1.0 - float(fee)))  # one round-trip
-        trades.append({"side": side, "entry_ts": idx[ei], "entry_px": float(ep), "exit_ts": idx[xi], "exit_px": float(xp), "bars_held": int(held), "net_factor": net_factor, "reason": reason})
+#     def _append(side, ei, ep, xi, xp, held, reason):
+#         gross = (xp / ep) if side == "long" else (ep / xp)
+#         net_factor = float(gross * (1.0 - float(fee)))  # one round-trip
+#         trades.append({"side": side, "entry_ts": idx[ei], "entry_px": float(ep), "exit_ts": idx[xi], "exit_px": float(xp), "bars_held": int(held), "net_factor": net_factor, "reason": reason})
 
-    for i in range(1, len(idx)):
-        lm = bool(long_mask.iloc[i])
-        sm = bool(short_mask.iloc[i])
+#     for i in range(1, len(idx)):
+#         lm = bool(long_mask.iloc[i])
+#         sm = bool(short_mask.iloc[i])
 
-        if mode == "long":
-            if pos == 0 and lm:
-                pos, ent_i, ent_px, bars = 1, i, close.iat[i], 0
-            elif pos == 1 and not lm:
-                _append("long", ent_i, ent_px, i, close.iat[i], bars + 1, "break"); pos, ent_i, ent_px, bars = 0, None, np.nan, 0
-            else:
-                if pos: bars += 1
+#         if mode == "long":
+#             if pos == 0 and lm:
+#                 pos, ent_i, ent_px, bars = 1, i, close.iat[i], 0
+#             elif pos == 1 and not lm:
+#                 _append("long", ent_i, ent_px, i, close.iat[i], bars + 1, "break"); pos, ent_i, ent_px, bars = 0, None, np.nan, 0
+#             else:
+#                 if pos: bars += 1
 
-        elif mode == "short":
-            if pos == 0 and sm:
-                pos, ent_i, ent_px, bars = -1, i, close.iat[i], 0
-            elif pos == -1 and not sm:
-                _append("short", ent_i, ent_px, i, close.iat[i], bars + 1, "break"); pos, ent_i, ent_px, bars = 0, None, np.nan, 0
-            else:
-                if pos: bars += 1
+#         elif mode == "short":
+#             if pos == 0 and sm:
+#                 pos, ent_i, ent_px, bars = -1, i, close.iat[i], 0
+#             elif pos == -1 and not sm:
+#                 _append("short", ent_i, ent_px, i, close.iat[i], bars + 1, "break"); pos, ent_i, ent_px, bars = 0, None, np.nan, 0
+#             else:
+#                 if pos: bars += 1
 
-        else:  # both (flip)
-            if lm and (pos <= 0):
-                if pos == -1:
-                    _append("short", ent_i, ent_px, i, close.iat[i], bars + 1, "flip")
-                pos, ent_i, ent_px, bars = 1, i, close.iat[i], 0
-            elif sm and (pos >= 0):
-                if pos == 1:
-                    _append("long", ent_i, ent_px, i, close.iat[i], bars + 1, "flip")
-                pos, ent_i, ent_px, bars = -1, i, close.iat[i], 0
-            else:
-                if pos: bars += 1
+#         else:  # both (flip)
+#             if lm and (pos <= 0):
+#                 if pos == -1:
+#                     _append("short", ent_i, ent_px, i, close.iat[i], bars + 1, "flip")
+#                 pos, ent_i, ent_px, bars = 1, i, close.iat[i], 0
+#             elif sm and (pos >= 0):
+#                 if pos == 1:
+#                     _append("long", ent_i, ent_px, i, close.iat[i], bars + 1, "flip")
+#                 pos, ent_i, ent_px, bars = -1, i, close.iat[i], 0
+#             else:
+#                 if pos: bars += 1
 
-    df_tr = pd.DataFrame(trades)
-    if df_tr.empty:
-        return pd.DataFrame(columns=["side","entry_ts","entry_px","exit_ts","exit_px","bars_held","net_factor","reason"])
-    return df_tr.sort_values("exit_ts").reset_index(drop=True)
+#     df_tr = pd.DataFrame(trades)
+#     if df_tr.empty:
+#         return pd.DataFrame(columns=["side","entry_ts","entry_px","exit_ts","exit_px","bars_held","net_factor","reason"])
+#     return df_tr.sort_values("exit_ts").reset_index(drop=True)
 
 
 
@@ -800,23 +808,6 @@ def attach_kalman_cols(view: pd.DataFrame, *, short_len: int = 50, long_len: int
     v["kal_sell"]     = sell.fillna(False).astype(bool)
     return v
 
-def _ensure_ts_index(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Ensure a tz-aware DatetimeIndex (UTC). If a 'ts' column exists, parse it and
-    set it as the index. Otherwise validate the existing index.
-    """
-    if "ts" in df.columns:
-        df = df.copy()
-        df["ts"] = pd.to_datetime(df["ts"], utc=True, errors="coerce")
-        df = df.dropna(subset=["ts"]).set_index("ts")
-
-    if not isinstance(df.index, pd.DatetimeIndex):
-        raise ValueError("Need a 'ts' column or a DatetimeIndex")
-
-    if df.index.tz is None:
-        df = df.tz_localize("UTC")
-
-    return df
 
 
 def _attach_trade_stats(view: pd.DataFrame, trades_df: pd.DataFrame) -> pd.DataFrame:
