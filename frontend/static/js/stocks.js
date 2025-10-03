@@ -8,9 +8,9 @@ function rowHTML(sym) {
     <tr data-sym="${sym}">
       <td><strong>${sym}</strong></td>
       <td class="actions">
-        <a class="analysis" href="${base}/candles/${sym}/?tf=1h&start=2025-09&end=2025-10">Candlestick</a>
-        <a class="analysis" href="${base}/equity/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=ema_stack_long">Cumulative</a>
-        <a class="analysis" href="${base}/all/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=kalman_cross">ALL</a>
+        <a class="analysis" href="${base}/candles/${sym}/?tf=1h&start=2025-09&end=2025-10&asset=stock">Candlestick</a>
+        <a class="analysis" href="${base}/equity/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=ema_stack_long&asset=stock">Cumulative</a>
+        <a class="analysis" href="${base}/all/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=kalman_cross&asset=stock">ALL</a>  
       </td>
     </tr>
   `;

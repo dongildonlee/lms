@@ -87,6 +87,33 @@ def _load_basic_df(path: Path) -> pd.DataFrame:
     return out
 
 
+# def _render_plot_html(fig: go.Figure, page_title: str) -> HttpResponse:
+#     # Use Plotly's built-in serializer
+#     fig_json = fig.to_json()  # returns a JSON string with data+layout
+#     html = f"""<!doctype html>
+# <html lang="en">
+# <head>
+#   <meta charset="utf-8" />
+#   <title>{page_title}</title>
+#   <meta name="viewport" content="width=device-width, initial-scale=1" />
+#   <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+#   <style>
+#     body{{font-family:system-ui,Segoe UI,Helvetica,Arial,sans-serif;padding:16px;}}
+#     a{{text-decoration:none}}
+#     .back{{margin-bottom:12px;display:inline-block}}
+#   </style>
+# </head>
+# <body>
+#   <a class="back" href="/investments">← Back to Investments</a>
+#   <div id="chart" style="max-width:1200px;"></div>
+#   <script>
+#     const fig = {fig_json};
+#     Plotly.newPlot("chart", fig.data, fig.layout, {{responsive:true}});
+#   </script>
+# </body>
+# </html>"""
+#     return HttpResponse(html)
+
 def _render_plot_html(fig: go.Figure, page_title: str) -> HttpResponse:
     # Use Plotly's built-in serializer
     fig_json = fig.to_json()  # returns a JSON string with data+layout
@@ -104,9 +131,27 @@ def _render_plot_html(fig: go.Figure, page_title: str) -> HttpResponse:
   </style>
 </head>
 <body>
-  <a class="back" href="/investments">← Back to Investments</a>
+  <!-- changed: give the link an id and neutral default -->
+  <a id="back-link" class="back" href="/crypto">← Back</a>
+
   <div id="chart" style="max-width:1200px;"></div>
+
   <script>
+    // NEW: set back link based on ?asset=...
+    (function() {{
+      const params = new URLSearchParams(location.search);
+      const asset = (params.get('asset') || '').toLowerCase();
+      const back = document.getElementById('back-link');
+      if (asset === 'stock') {{
+        back.href = '/stocks';
+        back.textContent = '← Back to stocks';
+      }} else {{
+        back.href = '/crypto';
+        back.textContent = '← Back to crypto';
+      }}
+    }})();
+
+    // Plotly render
     const fig = {fig_json};
     Plotly.newPlot("chart", fig.data, fig.layout, {{responsive:true}});
   </script>
@@ -596,7 +641,7 @@ def analysis_all(request, symbol_key: str):
 
 </head>
 <body>
-<a class="back" href="/investments">← Back to Investments</a>
+<a id="back-link" class="back" href="/crypto">← Back</a>
 <div class="wrap">
   <form class="toolbar" method="get" action="">
     <label for="start">Start month:</label>
@@ -632,6 +677,19 @@ def analysis_all(request, symbol_key: str):
   </div>
 </div>
 <script>
+  (function() {{
+    const params = new URLSearchParams(location.search);
+    const asset = (params.get('asset') || '').toLowerCase();
+    const back = document.getElementById('back-link');
+    if (!back) return;
+    if (asset === 'stock') {{
+      back.href = '/stocks';
+      back.textContent = '← Back to stocks';
+    }} else {{
+      back.href = '/crypto';
+      back.textContent = '← Back to crypto';
+    }}
+  }})();
   const figC = {fig_c_json};
   const figP = {fig_p_json};
   Plotly.newPlot("chart-c", figC.data, figC.layout, {{responsive:true}});
