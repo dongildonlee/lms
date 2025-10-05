@@ -7,23 +7,173 @@
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b1020;color:#111;padding:16px}
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: #0b1020;
+    color: #111;
+    padding: 16px;
+  }
   a{text-decoration:none}
-  .back{margin-bottom:12px;display:inline-block}
-  .wrap{max-width:1200px;margin:0 auto}
-  .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 16px}
-  .stack{display:flex;flex-direction:column;gap:24px}
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:12px}
-  h2{margin:0 0 8px;font-size:20px;font-weight:600;text-align:center}
-  #chart-c,#chart-p{width:100%;height:600px}
-  @media (max-width:700px){ #chart-c,#chart-p{height:420px} }
-  input[type=month]{padding:6px}
-  select,button{padding:6px 10px;cursor:pointer}
-  .hint{color:#6b7280}
-  .btn{display:inline-block;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;color:#111}
-  .btn:hover{background:#eef2ff}
+  .back{margin-bottom:12px;display:inline-block;color:#9ecbff}
+
+  /* Layout: sidebar + content */
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* Sidebar filter panel */
+
+  .symbol-title{
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: .02em;
+    margin: 0 0 12px;
+    text-align: center;
+    width: 100%;
+  }
+  .sidebar {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .sidebar h3 {
+    font-size: 16px;
+    margin: 0 0 12px;
+    color: #1e293b;
+    font-weight: 600;
+  }
+  .sidebar .section {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 16px;
+  }
+  .sidebar label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: #1e293b;
+  }
+  .sidebar input[type=month],
+  .sidebar select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .sidebar input[type=checkbox] {
+    margin-right: 6px;
+  }
+  .sidebar .checkbox-group label {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .sidebar .btn {
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+    padding: 10px;
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    color: #fff;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .sidebar .btn:hover {
+    background: #1d4ed8;
+  }
+  .sidebar .btn.secondary {
+    display: block;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+    background: #fff;
+    color: #2563eb;
+    border: 1px solid #2563eb;
+    margin-top: 8px;
+  }
+  .sidebar .hint {
+    color: #64748b;
+    font-size: 13px;
+    margin-top: 10px;
+  }
+
+  /* Main content (charts + table) */
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    padding: 12px;
+  }
+  h2 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+  }
+  #chart-c,#chart-p { width:100%; height:600px; }
+  @media (max-width:700px) {
+    .layout { grid-template-columns: 1fr; }
+    #chart-c,#chart-p { height:420px; }
+  }
+
+  /* Table styles (unchanged, but still nice) */
   .tbl{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
-  .tbl thead th{position:sticky;top:0;z-index:1;background:#f8fafc;text-align:left;font-weight:600;border-bottom:1px solid #e5e7eb;padding:8px}
+  .tbl thead th{
+    background: transparent;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: center;
+  }
+  
+  /* Pill style for header text (reuses your .badge look) */
+  .badge.hdr{
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;          /* bold face */
+    letter-spacing: .02em;
+    background: #f8fafc;       /* neutral pill */
+    color: #1e293b;
+    border: 1px solid #e5e7eb;
+  }
+
+  /* Keep header row clean so only the pill shows */
+  .tbl thead th{
+    background: transparent;          /* no gray header box */
+    border: 0;                        /* remove rectangle border */
+    border-bottom: 1px solid #e5e7eb; /* keep the bottom divider only */
+    text-align: center;
+    padding: 10px 6px;
+  }
+
+  /* DO NOT style the first header cell itself anymore */
+  .tbl thead tr:first-child th:first-child{
+    background: transparent;
+    border: 0;
+  }
+
   .tbl tbody td{border-bottom:1px solid #f1f5f9;padding:8px;white-space:nowrap}
   .tbl tbody tr:hover{background:#fafafa}
   .right{text-align:right}
@@ -32,63 +182,77 @@
   .badge.short{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
   .pos{color:#16a34a}
   .neg{color:#dc2626}
-  .th-sort{background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;cursor:pointer}
-  {% comment %} /* Readable text on the dark page background (outside cards) */ {% endcomment %}
-  .back{ color:#9ecbff; }                 
-  .toolbar label{ color:#e6ecff; }        
-  .hint{ color:#94a3b8; }
-  .toolbar-break { flex-basis: 100%; height: 0; }
-               
 </style>
 </head>
 <body>
 <a id="back-link" class="back" href="/crypto">← Back</a>
-<div class="wrap">
-  <form class="toolbar" method="get" action="">
-    <label for="start">Start month:</label>
-    <input type="month" id="start" name="start" min="{{ window.min_month }}" max="{{ window.max_month }}" value="{{ start_val }}">
-    <label for="end">End month:</label>
-    <input type="month" id="end" name="end" min="{{ window.min_month }}" max="{{ window.max_month }}" value="{{ end_val }}">
-    <label for="tf">Timeframe:</label>
-    <select id="tf" name="tf">
-      <option value="5m" {% if tf == '5m' %}selected{% endif %}>5m</option>
-      <option value="1h" {% if tf == '1h' %}selected{% endif %}>1h</option>
-      <option value="4h" {% if tf == '4h' %}selected{% endif %}>4h</option>
-      <option value="1d" {% if tf == '1d' %}selected{% endif %}>1d</option>
-    </select>
-    <label for="strat">Strategy:</label>
-    <select id="strat" name="strat">
-      <option value="ema_stack_long" {{ sel_long }}>EMA Stack — Long</option>
-      <option value="ema_stack_short" {{ sel_short }}>EMA Stack — Short</option>
-      <option value="ema_stack_long_short" {{ sel_both }}>EMA Stack — Long &amp; Short</option>
-      <option value="lorentzian_advta" {{ sel_lc }}>Lorentzian Classification</option>
-      <option value="kalman_cross"  {{ sel_kcross }}>Kalman Cross — Long &amp; Short</option>
-      <option value="kalman_long"  {{ sel_klong }}>Kalman Cross — Long Only</option>
-      <option value="kalman_short" {{ sel_kshort }}>Kalman Cross — Short Only</option>
-    </select>
-    <span class="toolbar-break"></span>
-    <label>EMAs:</label>
-    <label>EMAs:</label>
-    <label><input type="checkbox" name="ema" value="20" {% if 20 in ema_checked %}checked{% endif %}> 20</label>
-    <label><input type="checkbox" name="ema" value="50" {% if 50 in ema_checked %}checked{% endif %}> 50</label>
-    <label><input type="checkbox" name="ema" value="100" {% if 100 in ema_checked %}checked{% endif %}> 100</label>
 
-    <button id="apply", type="submit">Apply</button>
-    <a class="btn" id="nbBtn" href="{{ jupyter_url }}">Open in Jupyter</a>
-    <span class="hint">Available data: {{ window.min_month }} → {{ window.max_month }}</span>
-  </form>
-  <div class="stack">
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="symbol-title">{{ symbol_key }}</div>
+    <form method="get" action="">
+      <div class="section">
+        <h3>Date Range</h3>
+        <label for="start">Start month</label>
+        <input type="month" id="start" name="start" min="{{ window.min_month }}" max="{{ window.max_month }}" value="{{ start_val }}">
+        <label for="end">End month</label>
+        <input type="month" id="end" name="end" min="{{ window.min_month }}" max="{{ window.max_month }}" value="{{ end_val }}">
+      </div>
+      {% comment %} <div class="hint">Available data: {{ window.min_month }} → {{ window.max_month }}</div> {% endcomment %}
+      <div class="section">
+        <h3>Timeframe & Strategy</h3>
+        <label for="tf">Timeframe</label>
+        <select id="tf" name="tf">
+          <option value="5m" {% if tf == '5m' %}selected{% endif %}>5m</option>
+          <option value="1h" {% if tf == '1h' %}selected{% endif %}>1h</option>
+          <option value="4h" {% if tf == '4h' %}selected{% endif %}>4h</option>
+          <option value="1d" {% if tf == '1d' %}selected{% endif %}>1d</option>
+        </select>
+
+        <label for="strat">Strategy</label>
+        <select id="strat" name="strat">
+          <option value="ema_stack_long" {{ sel_long }}>EMA Stack — Long</option>
+          <option value="ema_stack_short" {{ sel_short }}>EMA Stack — Short</option>
+          <option value="ema_stack_long_short" {{ sel_both }}>EMA Stack — Long &amp; Short</option>
+          <option value="lorentzian_advta" {{ sel_lc }}>Lorentzian Classification</option>
+          <option value="kalman_cross" {{ sel_kcross }}>Kalman Cross — Long &amp; Short</option>
+          <option value="kalman_long" {{ sel_klong }}>Kalman Cross — Long Only</option>
+          <option value="kalman_short" {{ sel_kshort }}>Kalman Cross — Short Only</option>
+        </select>
+      </div>
+
+      <div class="section">
+        <h3>EMAs</h3>
+        <div class="checkbox-group">
+          <label><input type="checkbox" name="ema" value="20" {% if 20 in ema_checked %}checked{% endif %}> EMA 20</label>
+          <label><input type="checkbox" name="ema" value="50" {% if 50 in ema_checked %}checked{% endif %}> EMA 50</label>
+          <label><input type="checkbox" name="ema" value="100" {% if 100 in ema_checked %}checked{% endif %}> EMA 100</label>
+        </div>
+      </div>
+
+      <button id="apply" type="submit" class="btn">Apply</button>
+    </form>
+    <a class="btn secondary" id="nbBtn" href="{{ jupyter_url }}">Open in Jupyter</a>
+  </aside>
+
+  <!-- Main content -->
+  <main class="content">
     <div class="card"><h2>Candlestick</h2><div id="chart-c"></div></div>
     <div class="card"><h2>{{ strat_title }}</h2><div id="chart-p"></div></div>
-    <div class="card"><h2>Trades</h2><details open><summary>Show trades table</summary><div style="margin-top:10px; overflow:auto;">{{ table_html|safe }}</div></details></div>
-  </div>
+    <div class="card"><h2>Trades</h2>
+      <details open><summary>Show trades table</summary>
+        <div style="margin-top:10px; overflow:auto;">{{ table_html|safe }}</div>
+      </details>
+    </div>
+  </main>
 </div>
+
 <script>
   (function() {
     const params = new URLSearchParams(location.search);
     const asset = (params.get('asset') || '').toLowerCase();
     const back = document.getElementById('back-link');
-
     if (back) {
       if (asset === 'stock') {
         back.href = '/stocks';
@@ -99,6 +263,7 @@
       }
     }
   })();
+
 
   const figC = JSON.parse('{{ fig_c_json|escapejs }}');
   const figP = JSON.parse('{{ fig_p_json|escapejs }}');
@@ -113,7 +278,10 @@
     gd.on('plotly_relayout',ev=>{if(touchedX(ev))kick();});
     gd.on('plotly_relayouting',ev=>{if(touchedX(ev))kick();});
   }
-  wireAutoY('chart-c'); wireAutoY('chart-p');
+  wireAutoY('chart-c');
+  wireAutoY('chart-p');
 </script>
 <script>{{ js_interactions|safe }}</script>
-</body></html>
+</body>
+</html>
+
