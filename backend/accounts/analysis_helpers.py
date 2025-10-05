@@ -15,6 +15,13 @@ from .strategies.kalman import (
 
 import mplfinance as mpf
 
+# inside backend/accounts/analysis_helpers.py
+try:
+    from .strategies.signals import kalman_regression_down_line
+except ImportError:
+    from accounts.strategies.signals import kalman_regression_down_line
+
+
 
 RULE_MAP = {"5m": None, "1h": "1H", "4h": "4H", "1d": "1D"}
 BAR_MS_MAP = {"5m": 5*60*1000, "1h": 60*60*1000, "4h": 4*60*60*1000, "1d": 24*60*60*1000}
@@ -329,6 +336,8 @@ def make_candle_fig(
     window,            # PeriodWindow
     tf: str,
     ema_spans: Optional[Iterable[int]] = None,
+    show_regdn=False,
+    reg_scope="any_bar"
 ) -> go.Figure:
     """Build a candlestick figure with optional EMA overlays."""
     fig = go.Figure()
@@ -355,6 +364,43 @@ def make_candle_fig(
                     x=view["ts"], y=view[col], name=f"EMA {span}",
                     mode="lines", line={"width": 1},
                 ))
+                
+    # --- Kalman regression (down) overlay: concluded straight segments ---
+    # if show_regdn:
+    #     ensure_kalman_regression_down_cols(view)
+    #     s = view["kal_reg_dn"] if "kal_reg_dn" in view.columns else None
+    #     if s is not None and getattr(s, "notna", lambda: [])().any():
+    #         fig.add_trace(go.Scatter(
+    #             x=view["ts"], y=s, name="Kalman Reg ↓",
+    #             mode="lines", line={"width": 1, "dash": "dash"}
+    #         ))
+    if show_regdn:
+        ensure_kalman_regression_down_cols(view)
+        s = view["kal_reg_dn"] if "kal_reg_dn" in view.columns else None
+        if s is not None:
+            s = pd.Series(s)  # be sure it's a Series
+            if s.notna().any():
+                # Split into contiguous non-NaN segments and alternate colors
+                mask = s.notna()
+                groups = mask.ne(mask.shift(fill_value=False)).cumsum()
+                colors = ["#ffeb3b", "#ff9800"]  # yellow, orange
+                show_one_legend = True
+                color_idx = 0
+                for gid in groups[mask].unique():
+                    idx = s.index[groups == gid]
+                    fig.add_trace(go.Scatter(
+                        x=view.loc[idx, "ts"],
+                        y=s.loc[idx],
+                        name="Kalman Reg ↓",
+                        mode="lines",
+                        line=dict(width=3, color=colors[color_idx % 2]),  # bold, solid, alternating
+                        legendgroup="kal_reg",
+                        showlegend=show_one_legend,  # show one legend item total
+                        hoverinfo="skip",
+                    ))
+                    show_one_legend = False
+                    color_idx += 1
+
 
     fig.update_layout(
         title=f"{symbol_key}/USD — {window.start_period.strftime('%Y-%m')} → {window.end_period.strftime('%Y-%m')}  (tf={tf})",
@@ -1146,3 +1192,24 @@ def render_all_like_page(
 ) -> str:
     """Return the exact HTML used by analysis_all (same style/markup/scripts)."""
     return render_to_string("accounts/all_like.html", ctx, request=request)
+
+
+def ensure_kalman_regression_down_cols(df_view, *, scope: str = "any_bar") -> None:
+    if "kal_reg_dn" in df_view.columns and "kal_reg_break" in df_view.columns:
+        return
+    line, brk = kalman_regression_down_line(df_view, scope=scope)
+    df_view["kal_reg_dn"] = line
+    df_view["kal_reg_break"] = brk.astype(bool)
+    
+    
+# near your other imports
+from accounts.strategies.signals import kalman_regression_down_concluded_line
+
+def ensure_kalman_regression_down_cols(df_view: pd.DataFrame) -> None:
+    """
+    Adds 'kal_reg_dn' as *piecewise straight, concluded* regression-down segments.
+    """
+    if "kal_reg_dn" in df_view.columns:
+        return
+    df_view["kal_reg_dn"] = kalman_regression_down_concluded_line(df_view)
+
