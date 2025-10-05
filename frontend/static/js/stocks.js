@@ -11,6 +11,7 @@ function rowHTML(sym) {
         <a class="analysis" href="${base}/candles/${sym}/?tf=1h&start=2025-09&end=2025-10&asset=stock">Candlestick</a>
         <a class="analysis" href="${base}/equity/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=ema_stack_long&asset=stock">Cumulative</a>
         <a class="analysis" href="${base}/all/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=kalman_cross&asset=stock">ALL</a>  
+        <a class="analysis" href="${base}/historical/${sym}/?tf=1h&start=2025-09&end=2025-10&strat=ema_stack_long&asset=stock">Historical Data</a>
       </td>
     </tr>
   `;
@@ -36,6 +37,7 @@ async function ensureCsv(sym, asset) {
 function wireCheckThenGo(assetType) {
   document.addEventListener("click", async (e) => {
     const a = e.target.closest("a.analysis");
+
     if (!a) return;
     e.preventDefault();
 
@@ -54,9 +56,36 @@ function wireCheckThenGo(assetType) {
   });
 }
 
+// separate handler for 'Historical Data' links
+function wireHistoricalCheck() {
+    document.addEventListener("click", async (e) => {
+      const a = e.target.closest("a.analysis-hist");
+      if (!a) return;
+      e.preventDefault();
+      const tr = a.closest("tr");
+      const sym = tr?.dataset?.sym || a.dataset.symbol || a.textContent.trim();
+      a.dataset.oldText = a.textContent;
+      a.textContent = "Checking historical…";
+      try {
+        const url = `/api/analysis/check_historical_csv/${encodeURIComponent(sym)}/`;
+        const res = await fetch(url, { method: "GET" });
+        const data = await res.json().catch(()=> ({}));
+        if (!res.ok || !data.ok) {
+          const reason = data?.reason || `No HistoricalData_${sym}.csv`;
+          throw new Error(reason);
+        }
+        location.href = a.href;
+      } catch (err) {
+        alert(`Cannot open historical for ${sym}: ${err.message}`);
+        a.textContent = a.dataset.oldText || "Historical Data";
+      }
+    });
+  }
+
 // init
 renderStocks();
 wireCheckThenGo("stock");
+wireHistoricalCheck();
 
 async function ensureCsv(sym, asset, tf) {
     // 1) check

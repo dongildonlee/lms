@@ -75,6 +75,7 @@ TEMPLATES = [
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [FRONTEND_DIR,
                  FRONTEND_DIR / "pages",
+                 BASE_DIR / "templates",          # ✅ backend/templates (your chart_and_table.html lives here)
                  ],                      # ✅ use sibling frontend/
         "APP_DIRS": True,
         "OPTIONS": {

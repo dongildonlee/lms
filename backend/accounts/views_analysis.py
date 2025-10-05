@@ -11,11 +11,19 @@ from django.urls import reverse
 import re, os, sys, time, subprocess, tempfile, socket
 from urllib.parse import quote
 import importlib.util
-from .analysis_helpers import add_markers_to_candle, build_trades_for_strategy
+from .analysis_helpers import add_markers_to_candle, build_trades_for_strategy, render_all_like_page
 from . import views_data
 from django.utils import timezone
+from django.shortcuts import render
+
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# Anchor from this file → .../backend → .../backend/data/stocks
+_ACCOUNTS_DIR = Path(__file__).resolve().parent
+_BACKEND_DIR  = _ACCOUNTS_DIR.parent
+_HIST_DIR     = (_BACKEND_DIR / "data" / "stocks").resolve()
+
 
 SYMBOL_MAP = {
     "BTC": "BTC/USD",
@@ -31,60 +39,112 @@ SYMBOL_MAP = {
 def _csv_path(symbol_key: str) -> Path:
     return DATA_DIR / f"{symbol_key.lower()}usd_5m_coinbase.csv"
 
-# --- tolerant CSV loader: supports {ts} OR {date,time} OR any datetime-like col ---
+
+def _historical_csv_path(symbol_key: str):
+    """
+    Look for HistoricalData_<TICKER>.csv under backend/data/stocks,
+    tolerating case and extension (.csv/.CSV).
+    """
+    sym_up = (symbol_key or "").strip().upper()
+    if not sym_up:
+        return None
+    candidates = [
+        _HIST_DIR / f"HistoricalData_{sym_up}.csv",
+        _HIST_DIR / f"HistoricalData_{sym_up}.CSV",
+        _HIST_DIR / f"historicaldata_{sym_up}.csv",  # just in case
+        _HIST_DIR / f"historicaldata_{sym_up}.CSV",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    # Last-ditch: glob anything that contains the ticker
+    for p in _HIST_DIR.glob(f"*{sym_up}*.csv"):
+        if p.is_file():
+            return p
+    for p in _HIST_DIR.glob(f"*{sym_up}*.CSV"):
+        if p.is_file():
+            return p
+    return None
+
+
+# --- replace the whole _load_basic_df with this ---
 def _load_basic_df(path: Path) -> pd.DataFrame:
     import pandas as pd
-    from pandas.api.types import is_datetime64tz_dtype
 
     df = pd.read_csv(path)
 
+    # Normalize column lookup (case-insensitive)
     colmap = {c.lower(): c for c in df.columns}
     def pick(*names):
         for n in names:
-            if n in colmap: return colmap[n]
+            if n in colmap:
+                return colmap[n]
         return None
 
+    # ---------- timestamp ----------
+    ts = None
     if "ts" in df.columns:
         ts = pd.to_datetime(df["ts"], utc=True, errors="coerce")
     elif {"date", "time"}.issubset({c.lower() for c in df.columns}):
-        date_col = pick("date")
-        time_col = pick("time")
-        ts = pd.to_datetime(df[date_col] + " " + df[time_col], utc=True, errors="coerce")
+        dcol, tcol = pick("date"), pick("time")
+        ts = pd.to_datetime(df[dcol].astype(str) + " " + df[tcol].astype(str), utc=True, errors="coerce")
+    elif pick("date") is not None:
+        dcol = pick("date")
+        ts = pd.to_datetime(df[dcol], utc=True, errors="coerce")
     else:
-        ts = None
+        # last-ditch: first datetime-parsable column
         for c in df.columns:
             s = pd.to_datetime(df[c], utc=True, errors="coerce")
             if s.notna().any():
                 ts = s
                 break
-        if ts is None:
-            raise ValueError("CSV must contain 'ts' or 'date'+'time' (or a datetime-like column).")
+    if ts is None:
+        raise ValueError("CSV must contain a datetime-like column (ts or date[/time]).")
 
-    df = df.assign(ts=ts).dropna(subset=["ts"])
+    # ---------- choose OHLCV with synonyms ----------
+    open_col  = pick("open")
+    high_col  = pick("high")
+    low_col   = pick("low")
+    # Apple/Yahoo often use "Close/Last" or "Adj Close"
+    close_col = pick("close", "close/last", "adj close", "adj_close", "adjclose")
+    vol_col   = pick("volume", "vol")
 
-    open_col  = pick("open")  or "open"
-    high_col  = pick("high")  or pick("close") or "close"
-    low_col   = pick("low")   or pick("close") or "close"
-    close_col = pick("close") or "close"
-    vol_col   = pick("volume") or pick("vol") or None
+    # Fallbacks (use ‘Open’/’High’/’Low’ title case if present)
+    if open_col is None and "Open" in df.columns:  open_col = "Open"
+    if high_col is None and "High" in df.columns:  high_col = "High"
+    if low_col  is None and "Low"  in df.columns:  low_col  = "Low"
 
+    if close_col is None:
+        # Apple order is usually Date, Close/Last, Volume, Open, High, Low
+        if "Close/Last" in df.columns: close_col = "Close/Last"
+        else:
+            # very last resort: second column if it looks numeric, otherwise first numeric column
+            for c in list(df.columns)[1:] + list(df.columns)[:1]:
+                s = pd.to_numeric(df[c], errors="coerce")
+                if s.notna().any():
+                    close_col = c
+                    break
+
+    # ---------- build canonical frame ----------
     out = pd.DataFrame({
-        "ts": df["ts"],
+        "ts": ts,
         "open":  df[open_col]  if open_col  in df.columns else df[close_col],
         "high":  df[high_col]  if high_col  in df.columns else df[close_col],
         "low":   df[low_col]   if low_col   in df.columns else df[close_col],
-        "close": df[close_col] if close_col in df.columns else df.iloc[:, 0],
+        "close": df[close_col],
     })
-    if vol_col and vol_col in df.columns:
-        out["volume"] = df[vol_col]
+    out["volume"] = df[vol_col] if (vol_col and vol_col in df.columns) else 0
 
-    out = out.sort_values("ts").reset_index(drop=True)
+    # ---------- coerce numerics (strip $, ,) ----------
+    for c in ("open", "high", "low", "close", "volume"):
+        if c in out.columns:
+            s = out[c].astype(str).str.replace("$", "", regex=False).str.replace(",", "", regex=False)
+            out[c] = pd.to_numeric(s, errors="coerce")
 
-    # ✅ Make timestamps tz-naive but in UTC (avoids tz-aware/naive comparison errors)
-    if is_datetime64tz_dtype(out["ts"]):
-        out["ts"] = out["ts"].dt.tz_convert("UTC").dt.tz_localize(None)
-
+    # Clean + sort
+    out = out.dropna(subset=["ts"]).sort_values("ts").reset_index(drop=True)
     return out
+
 
 
 # def _render_plot_html(fig: go.Figure, page_title: str) -> HttpResponse:
@@ -243,9 +303,6 @@ def analysis_candles(request, symbol_key: str):
 
     tail = df.tail(N).copy()
     
-    # NEW: overlay toggles from query string
-    show_kreg  = request.GET.get("kreg", "0") == "1"
-    kreg_scope = request.GET.get("kreg_scope", "any_bar")  # or "uptrend_only"
 
     fig = go.Figure()
     fig.add_trace(go.Candlestick(
@@ -257,11 +314,6 @@ def analysis_candles(request, symbol_key: str):
     for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
         if col in tail.columns and tail[col].notna().any():
             fig.add_trace(go.Scatter(x=tail["ts"], y=tail[col], mode="lines", name=label))
-
-
-    # 🔹 NEW: Kalman regression-down overlay
-    if show_kreg:
-        add_kalman_regression_overlays(fig, tail, scope=kreg_scope, show_peaks=True, show_breaks=True)
     
     
     # Keep existing styling (unchanged)
@@ -605,118 +657,36 @@ def analysis_all(request, symbol_key: str):
     sel_klong  = "selected" if strat_key == "kalman_long"  else ""
     sel_kshort = "selected" if strat_key == "kalman_short" else ""
 
+    context = {
+    "symbol_key": symbol_key,
+    "window": window,
+    "tf": tf,
+    "strat_title": strat_title,
 
-    html = f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>{symbol_key} — Candles & Strategy</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
-<style>
-  body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f7f7fb;color:#111;padding:16px}}
-  a{{text-decoration:none}}
-  .back{{margin-bottom:12px;display:inline-block}}
-  .wrap{{max-width:1200px;margin:0 auto}}
-  .toolbar{{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 16px}}
-  .stack{{display:flex;flex-direction:column;gap:24px}}
-  .card{{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:12px}}
-  h2{{margin:0 0 8px;font-size:20px;font-weight:600;text-align:center}}
-  #chart-c,#chart-p{{width:100%;height:600px}}
-  @media (max-width:700px){{ #chart-c,#chart-p{{height:420px}} }}
-  input[type=month]{{padding:6px}}
-  select,button{{padding:6px 10px;cursor:pointer}}
-  .hint{{color:#6b7280}}
-  .btn{{display:inline-block;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;color:#111}}
-  .btn:hover{{background:#eef2ff}}
+    # IMPORTANT: these are JSON STRINGS; your template will JSON.parse them
+    "fig_c_json": fig_c.to_json(),
+    "fig_p_json": fig_p.to_json(),
 
-  /* Table */
-  .tbl{{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}}
-  .tbl thead th{{position:sticky;top:0;z-index:1;background:#f8fafc;text-align:left;font-weight:600;border-bottom:1px solid #e5e7eb;padding:8px}}
-  .tbl tbody td{{border-bottom:1px solid #f1f5f9;padding:8px;white-space:nowrap}}
-  .tbl tbody tr:hover{{background:#fafafa}}
-  .right{{text-align:right}}
+    # HTML/JS strings for the table & interactions
+    "table_html": table_html,                      # you already computed this above
+    "js_interactions": js_interactions,            # same
 
-  /* Badges & numbers */
-  .badge{{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.02em}}
-  .badge.long{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}}
-  .badge.short{{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}}
-  .pos{{color:#16a34a}}
-  .neg{{color:#dc2626}}
+    # toolbar/jupyter bits
+    "jupyter_url": jupyter_url,
+    "start_val": start_val,
+    "end_val": end_val,
 
-  /* Sort button (if used) */
-  .th-sort{{background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;cursor:pointer}}
-</style>
+    # select states
+    "sel_long":   sel_long,
+    "sel_short":  sel_short,
+    "sel_both":   sel_both,
+    "sel_lc":     sel_lc,
+    "sel_kcross": sel_kcross,
+    "sel_klong":  sel_klong,
+    "sel_kshort": sel_kshort,
+}
 
-
-</head>
-<body>
-<a id="back-link" class="back" href="/crypto">← Back</a>
-<div class="wrap">
-  <form class="toolbar" method="get" action="">
-    <label for="start">Start month:</label>
-    <input type="month" id="start" name="start" min="{window.min_month}" max="{window.max_month}" value="{start_val}">
-    <label for="end">End month:</label>
-    <input type="month" id="end" name="end" min="{window.min_month}" max="{window.max_month}" value="{end_val}">
-    <label for="tf">Timeframe:</label>
-    <select id="tf" name="tf">
-      <option value="5m" {"selected" if tf=="5m" else ""}>5m</option>
-      <option value="1h" {"selected" if tf=="1h" else ""}>1h</option>
-      <option value="4h" {"selected" if tf=="4h" else ""}>4h</option>
-      <option value="1d" {"selected" if tf=="1d" else ""}>1d</option>
-    </select>
-    <label for="strat">Strategy:</label>
-    <select id="strat" name="strat">
-      <option value="ema_stack_long" {sel_long}>EMA Stack — Long</option>
-      <option value="ema_stack_short" {sel_short}>EMA Stack — Short</option>
-      <option value="ema_stack_long_short" {sel_both}>EMA Stack — Long &amp; Short</option>
-      <option value="lorentzian_advta" {sel_lc}>Lorentzian Classification</option>
-      <option value="kalman_cross"  {sel_kcross}>Kalman Cross — Long &amp; Short</option>
-      <option value="kalman_long"  {sel_klong}>Kalman Cross — Long Only</option>
-      <option value="kalman_short" {sel_kshort}>Kalman Cross — Short Only</option>
-
-    </select>
-    <button type="submit">Apply</button>
-    <a class="btn" id="nbBtn" href="{jupyter_url}">Open in Jupyter</a>
-    <span class="hint">Available data: {window.min_month} → {window.max_month}</span>
-  </form>
-  <div class="stack">
-    <div class="card"><h2>Candlestick</h2><div id="chart-c"></div></div>
-    <div class="card"><h2>{strat_title}</h2><div id="chart-p"></div></div>
-    <div class="card"><h2>Trades</h2><details open><summary>Show trades table</summary><div style="margin-top:10px; overflow:auto;">{table_html}</div></details></div>
-  </div>
-</div>
-<script>
-  (function() {{
-    const params = new URLSearchParams(location.search);
-    const asset = (params.get('asset') || '').toLowerCase();
-    const back = document.getElementById('back-link');
-    if (!back) return;
-    if (asset === 'stock') {{
-      back.href = '/stocks';
-      back.textContent = '← Back to stocks';
-    }} else {{
-      back.href = '/crypto';
-      back.textContent = '← Back to crypto';
-    }}
-  }})();
-  const figC = {fig_c_json};
-  const figP = {fig_p_json};
-  Plotly.newPlot("chart-c", figC.data, figC.layout, {{responsive:true}});
-  Plotly.newPlot("chart-p", figP.data, figP.layout, {{responsive:true}});
-  function wireAutoY(id) {{
-    const gd = document.getElementById(id);
-    let t=null;
-    const kick=()=>{{ if(t)clearTimeout(t); t=setTimeout(()=>{{Plotly.relayout(gd, {{'yaxis.autorange': true}});}},25); }};
-    const touchedX=(ev={{}})=>Object.keys(ev).some(k=>k.startsWith('xaxis.'));
-    gd.on('plotly_relayout',ev=>{{if(touchedX(ev))kick();}});
-    gd.on('plotly_relayouting',ev=>{{if(touchedX(ev))kick();}});
-  }}
-  wireAutoY('chart-c'); wireAutoY('chart-p');
-</script>
-<script>{js_interactions}</script>
-</body></html>"""
-    return HttpResponse(html)
+    return render(request, "chart_and_table.html", context)
 
 
 
@@ -1519,4 +1489,136 @@ def analysis_check_csv(request, symbol: str):
             "fresh": True,
         }
     )
+
+
+def analysis_check_historical_csv(request, symbol: str):
+    sym = (symbol or "").strip()
+    p = _historical_csv_path(sym)
+    if p is None:
+        exists_dir = _HIST_DIR.exists()
+        listing = []
+        try:
+            if exists_dir:
+                # limit to 200 names to avoid huge payloads
+                listing = sorted(os.listdir(_HIST_DIR))[:200]
+        except Exception as e:
+            listing = [f"<error reading dir: {e}>"]
+        return JsonResponse(
+            {
+                "ok": False,
+                "exists": False,
+                "reason": f"No HistoricalData_{sym.upper()}.csv",
+                "searched_dir": str(_HIST_DIR),
+                "dir_exists": exists_dir,
+                "dir_listing_sample": listing,
+            },
+            status=404,
+        )
+
+    # Found
+    try:
+        with open(p, "r", encoding="utf-8", errors="ignore") as f:
+            rows = max(0, sum(1 for _ in f) - 1)
+    except Exception:
+        rows = None
+    return JsonResponse(
+        {"ok": True, "exists": True, "path": str(p), "rows": rows, "searched_dir": str(_HIST_DIR)}
+    )
+
+
+def analysis_historical(request, symbol_key: str):
+    """
+    Same output as /api/analysis/all/<symbol>/, but forces CSV from data/stocks/HistoricalData_<SYM>.csv
+    """
+    from django.http import HttpResponse, HttpResponseBadRequest
+    from django.urls import reverse
+    from .analysis_helpers import (
+        FEE_DEFAULT, BAR_MS_MAP, compute_period_window, slice_and_resample,
+        make_candle_fig, make_equity_fig, add_markers_to_candle,
+        trades_table_html, trades_table_js, build_trades_for_strategy,
+        render_all_like_page,  # <- your updated template helper
+    )
+
+    symbol_key = (symbol_key or "").upper()
+
+    # 1) CSV (force backend/data/stocks/HistoricalData_<SYM>.csv)
+    csv_path = _historical_csv_path(symbol_key)
+    if not csv_path or not csv_path.exists():
+        return HttpResponseBadRequest(f"HistoricalData_{symbol_key}.csv not found in data/stocks.")
+
+    # 2) Load + validate
+    df = _load_basic_df(csv_path)
+    if df.empty or df["ts"].isna().all():
+        return HttpResponseBadRequest("No data in CSV.")
+
+    # 3) Params
+    try:
+        fee = float(request.GET.get("fee", str(FEE_DEFAULT)))
+    except Exception:
+        fee = float(FEE_DEFAULT)
+
+    tf = (request.GET.get("tf") or "5m").lower()
+    if tf not in {"5m", "1h", "4h", "1d"}:
+        tf = "5m"
+
+    # 4) Window + resample
+    window = compute_period_window(df, request.GET.get("start"), request.GET.get("end"))
+    view = slice_and_resample(df, window, tf)
+
+    # 5) Strategy
+    allowed = {"ema_stack_long","ema_stack_short","ema_stack_long_short",
+               "lorentzian_advta","kalman_cross","kalman_long","kalman_short"}
+    strat_key = (request.GET.get("strat") or "ema_stack_long").lower()
+    if strat_key not in allowed:
+        strat_key = "ema_stack_long"
+
+    trades_df, strat_title = build_trades_for_strategy(view, strat_key, fee)
+
+    # 6) Figures (+ markers if LC)
+    fig_c = make_candle_fig(view, symbol_key, window, tf)
+    fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
+    if strat_key == "lorentzian_advta":
+        add_markers_to_candle(fig_c, view, trades_df)
+
+    # 7) Table + interactions
+    table_html = trades_table_html(trades_df)
+    js_interactions = trades_table_js(BAR_MS_MAP[tf], pre_bars=36)
+
+    start_val = window.start_period.strftime("%Y-%m")
+    end_val   = window.end_period.strftime("%Y-%m")
+    nb_base   = request.build_absolute_uri(reverse("analysis_to_jupyter", args=[symbol_key]))
+    jupyter_url = f"{nb_base}?start={start_val}&end={end_val}&tf={tf}&strat={strat_key}&fee={fee:.6f}"
+
+    sel_long   = "selected" if strat_key == "ema_stack_long"        else ""
+    sel_short  = "selected" if strat_key == "ema_stack_short"       else ""
+    sel_both   = "selected" if strat_key == "ema_stack_long_short"  else ""
+    sel_lc     = "selected" if strat_key == "lorentzian_advta"      else ""
+    sel_kcross = "selected" if strat_key == "kalman_cross"          else ""
+    sel_klong  = "selected" if strat_key == "kalman_long"           else ""
+    sel_kshort = "selected" if strat_key == "kalman_short"          else ""
+
+    context = {
+        "symbol_key": symbol_key,
+        "window": window,
+        "tf": tf,
+        "strat_title": strat_title,
+        # IMPORTANT: pass JSON strings; parse them in the template
+        "fig_c_json": fig_c.to_json(),
+        "fig_p_json": fig_p.to_json(),
+        "table_html": table_html,
+        "js_interactions": js_interactions,
+        "jupyter_url": jupyter_url,
+        "start_val": start_val,
+        "end_val": end_val,
+        "sel_long": sel_long,
+        "sel_short": sel_short,
+        "sel_both": sel_both,
+        "sel_lc": sel_lc,
+        "sel_kcross": sel_kcross,
+        "sel_klong": sel_klong,
+        "sel_kshort": sel_kshort,
+    }
+
+    return render(request, "chart_and_table.html", context)
+
 

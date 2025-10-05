@@ -146,8 +146,22 @@ def resample_ohlc(df: pd.DataFrame, rule: str) -> pd.DataFrame:
 
 
 def slice_and_resample(df: pd.DataFrame, window: PeriodWindow, tf: str) -> pd.DataFrame:
+    # Normalize timestamps to UTC-aware for safe comparisons
+    df = df.copy()
+    df["ts"] = pd.to_datetime(df["ts"], utc=True, errors="coerce")
+
+    def _to_aware_utc(x):
+        x = pd.Timestamp(x)
+        return x.tz_localize("UTC") if x.tzinfo is None else x.tz_convert("UTC")
+
+    start = _to_aware_utc(window.start_ts)
+    end   = _to_aware_utc(window.end_ts)
+
+    # (now do the slice using the aware bounds)
+
     """Slice to month window on 5m then resample."""
-    view_5m = df[(df["ts"] >= window.start_ts) & (df["ts"] <= window.end_ts)].copy()
+    view_5m = df[(df["ts"] >= start) & (df["ts"] <= end)].copy()
+
     tf_s = str(tf).strip()
     if tf_s in ("5m", "5min"):
         view = view_5m.copy()
@@ -1043,3 +1057,32 @@ def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, t
     fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
     fig.update_yaxes(title_text="Price (USD)")
     return fig
+
+
+
+
+# backend/accounts/analysis_helpers.py
+
+def render_all_like_page(
+    *,
+    symbol_key: str,
+    window,
+    tf: str,
+    strat_title: str,
+    fig_c_json: str,
+    fig_p_json: str,
+    table_html: str,
+    js_interactions: str,
+    jupyter_url: str,
+    start_val: str,
+    end_val: str,
+    sel_long: str,
+    sel_short: str,
+    sel_both: str,
+    sel_lc: str,
+    sel_kcross: str,
+    sel_klong: str,
+    sel_kshort: str,
+) -> str:
+    """Return the exact HTML used by analysis_all (same style/markup/scripts)."""
+    return render_to_string("accounts/all_like.html", ctx, request=request)

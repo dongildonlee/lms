@@ -39,3 +39,8 @@ data/**/*.csv
 datasets/**/*.csv
 *.parquet
 *.feather
+
+# local data
+backend/data/*.csv
+backend/data/**/*.csv
+
