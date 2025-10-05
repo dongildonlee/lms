@@ -876,3 +876,170 @@ def _attach_trade_stats(view: pd.DataFrame, trades_df: pd.DataFrame) -> pd.DataF
     trades_df["cum_pnl_pct"] = ((1.0 + pnl_frac).cumprod() - 1.0) * 100.0
     return trades_df
 
+
+
+
+
+def _compute_kalman_regression_segments(view: pd.DataFrame, scope: str = "any_bar"):
+    """
+    Build regression-down segments from concluded Kalman uptrends.
+    Returns (segments, peaks, break_idx).
+    Each segment has: x_idx (iloc indices), y_pred (float[]), m, b, run_peaks.
+    """
+    assert {"ts","close"} <= set(view.columns)
+    close = pd.to_numeric(view["close"], errors="coerce")
+    n = len(view)
+    if n < 5:
+        return [], [], np.array([], dtype=int)
+
+    # lazy import to avoid circulars
+    try:
+        from .strategies.signals import isKalmanUptrend, isKalman_regression_down_break
+    except Exception:
+        from backend.accounts.strategies.signals import isKalmanUptrend, isKalman_regression_down_break
+
+    is_up = isKalmanUptrend(view).astype(bool)
+    a = is_up.to_numpy(dtype=bool)
+
+    # detect concluded uptrends
+    ft_up_idx   = np.where(~a[:-1] &  a[1:])[0] + 1  # starts
+    tf_down_idx = np.where( a[:-1] & ~a[1:])[0] + 1  # ends
+    starts, ends = [], []
+    s_i = d_i = 0
+    while s_i < len(ft_up_idx) and d_i < len(tf_down_idx):
+        s = ft_up_idx[s_i]; d = tf_down_idx[d_i]
+        if s < d:
+            starts.append(s); ends.append(d)
+            s_i += 1; d_i += 1
+        else:
+            d_i += 1
+    ut_concluded = [np.arange(s, e) for s, e in zip(starts, ends) if e > s]
+
+    # peaks for concluded uptrends
+    peaks = []
+    for seg in ut_concluded:
+        seg_close = close.iloc[seg].to_numpy()
+        if seg_close.size == 0: 
+            continue
+        pk_off = int(np.argmax(seg_close))
+        pk_idx = int(seg[pk_off])
+        peaks.append((pk_idx, float(close.iat[pk_idx])))
+
+    segments = []
+    if len(peaks) >= 2:
+        run_start = None
+        for i in range(1, len(peaks)):
+            prev_idx, prev_px = peaks[i-1]
+            curr_idx, curr_px = peaks[i]
+            if curr_px < prev_px:
+                if run_start is None:
+                    run_start = i - 1
+                xs = np.array([peaks[k][0] for k in range(run_start, i + 1)], dtype=float)
+                ys = np.array([peaks[k][1] for k in range(run_start, i + 1)], dtype=float)
+                m, b = np.polyfit(xs, ys, 1)
+
+                if scope == "uptrend_only":
+                    seg_idx = ut_concluded[i + 1] if (i + 1) < len(ut_concluded) else np.array([], dtype=int)
+                else:
+                    end_i = peaks[i + 1][0] if (i + 1) < len(peaks) else (n - 1)
+                    seg_idx = np.arange(curr_idx, end_i + 1)
+
+                if seg_idx.size:
+                    x = seg_idx.astype(float)
+                    y_pred = m * x + b
+                    segments.append({
+                        "x_idx": seg_idx,
+                        "y_pred": y_pred,
+                        "m": float(m), "b": float(b),
+                        "run_peaks": peaks[run_start:i+1].copy(),
+                    })
+            else:
+                run_start = None
+
+    # breakout bars (state-like: 1 on every bar above the line)
+    try:
+        br_mask = isKalman_regression_down_break(view, scope="any_bar")
+        break_idx = np.where(np.asarray(br_mask, dtype=np.uint8) == 1)[0]
+    except Exception:
+        break_idx = np.array([], dtype=int)
+
+    return segments, peaks, break_idx
+
+
+def add_kalman_regression_overlays(
+    fig: go.Figure,
+    view: pd.DataFrame,
+    *,
+    scope: str = "any_bar",        # or 'uptrend_only'
+    show_peaks: bool = True,
+    show_breaks: bool = True,
+    name_prefix: str = "KReg↓",
+):
+    """Overlay regression-down lines, peak markers, and breakout markers on a candle fig."""
+    segments, peaks, break_idx = _compute_kalman_regression_segments(view, scope=scope)
+
+    # dashed regression lines
+    for j, seg in enumerate(segments, 1):
+        x = view["ts"].iloc[seg["x_idx"]]
+        y = seg["y_pred"]
+        fig.add_trace(go.Scatter(
+            x=x, y=y, mode="lines",
+            name=f"{name_prefix} line {j}",
+            line=dict(dash="dash", width=2),
+            hovertemplate=f"{name_prefix} line {j}<br>ts=%{{x|%Y-%m-%d %H:%M}}<br>y=%{{y:.4f}}<extra></extra>",
+            showlegend=False,
+        ))
+
+    # peak points
+    if show_peaks and peaks:
+        pk_idx = [i for (i, _) in peaks]
+        pk_ts  = view["ts"].iloc[pk_idx]
+        pk_px  = [p for (_, p) in peaks]
+        fig.add_trace(go.Scatter(
+            x=pk_ts, y=pk_px, mode="markers",
+            name=f"{name_prefix} peaks",
+            marker=dict(size=7, symbol="triangle-up"),
+            hovertemplate="peak<br>ts=%{x|%Y-%m-%d %H:%M}<br>close=%{y:.4f}<extra></extra>",
+        ))
+
+    # breakout markers
+    if show_breaks and break_idx.size:
+        bx_ts = view["ts"].iloc[break_idx]
+        bx_px = view["close"].iloc[break_idx]
+        fig.add_trace(go.Scatter(
+            x=bx_ts, y=bx_px, mode="markers",
+            name=f"{name_prefix} breakout",
+            marker=dict(size=7, symbol="star"),
+            hovertemplate="breakout<br>ts=%{x|%Y-%m-%d %H:%M}<br>close=%{y:.4f}<extra></extra>",
+        ))
+
+    return fig
+
+
+
+def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, tf: str,
+                    *, show_kreg: bool = False, kreg_scope: str = "any_bar") -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(
+        x=view["ts"], open=view["open"], high=view["high"], low=view["low"], close=view["close"],
+        name=f"{symbol_key}/USD"
+    ))
+    # existing EMA overlays…
+    for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
+        if col in view.columns and view[col].notna().any():
+            fig.add_trace(go.Scatter(x=view["ts"], y=view[col], mode="lines", name=label))
+
+    # 🔹 optional regression overlay
+    if show_kreg:
+        add_kalman_regression_overlays(fig, view, scope=kreg_scope, show_peaks=True, show_breaks=True)
+
+    fig.update_layout(  # (unchanged)
+        title=f"{symbol_key}/USD — {window.start_period.strftime('%Y-%m')} → {window.end_period.strftime('%Y-%m')}  (tf={tf})",
+        xaxis_rangeslider_visible=True,
+        hovermode="x unified",
+        margin=dict(l=40, r=20, t=50, b=30),
+        legend=dict(orientation="h", y=1.02, x=0, yanchor="bottom", xanchor="left"),
+    )
+    fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
+    fig.update_yaxes(title_text="Price (USD)")
+    return fig

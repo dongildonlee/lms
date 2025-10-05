@@ -242,6 +242,10 @@ def analysis_candles(request, symbol_key: str):
         N = 300
 
     tail = df.tail(N).copy()
+    
+    # NEW: overlay toggles from query string
+    show_kreg  = request.GET.get("kreg", "0") == "1"
+    kreg_scope = request.GET.get("kreg_scope", "any_bar")  # or "uptrend_only"
 
     fig = go.Figure()
     fig.add_trace(go.Candlestick(
@@ -254,6 +258,12 @@ def analysis_candles(request, symbol_key: str):
         if col in tail.columns and tail[col].notna().any():
             fig.add_trace(go.Scatter(x=tail["ts"], y=tail[col], mode="lines", name=label))
 
+
+    # 🔹 NEW: Kalman regression-down overlay
+    if show_kreg:
+        add_kalman_regression_overlays(fig, tail, scope=kreg_scope, show_peaks=True, show_breaks=True)
+    
+    
     # Keep existing styling (unchanged)
     fig.update_layout(
         title=f"{display} — last {len(tail)} × 5m candles",

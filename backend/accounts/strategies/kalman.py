@@ -49,40 +49,175 @@ def _kalman_filter_series(close: pd.Series, length: int, R: float = 0.01, Q: flo
         err = (1.0 - gain) * err + Q / max(1, int(length))
     return pd.Series(est, index=close.index)
 
-def attach_kalman_cols(view: pd.DataFrame, *, short_len: int = 50, long_len: int = 150,
-                       slope_ema: int = 5, extra_smooth: int = 12) -> pd.DataFrame:
-    """Append Kalman levels, smoothed slopes, and buy/sell cross flags to `view`."""
+# def attach_kalman_cols(view: pd.DataFrame, *, short_len: int = 50, long_len: int = 150,
+#                        slope_ema: int = 5, extra_smooth: int = 12) -> pd.DataFrame:
+#     """Append Kalman levels, smoothed slopes, and buy/sell cross flags to `view`."""
+#     v = view.copy()
+#     # ensure numeric, sorted
+#     v = v.sort_values("ts") if "ts" in v.columns else v.sort_index()
+#     for c in ("open","high","low","close"):
+#         if c in v.columns:
+#             v[c] = pd.to_numeric(v[c], errors="coerce")
+
+#     k_short = _kalman_filter_series(v["close"], short_len)
+#     k_long  = _kalman_filter_series(v["close"], long_len)
+
+#     s_raw = k_short - k_short.shift(1)
+#     l_raw = k_long  - k_long.shift(1)
+
+#     def _ema(s, n):
+#         return pd.to_numeric(s, errors="coerce").ewm(span=max(1, int(n)), adjust=False).mean()
+
+#     s_ema = _ema(s_raw, slope_ema)
+#     l_ema = _ema(l_raw,  slope_ema)
+#     s_sm  = _ema(s_ema,  extra_smooth)
+#     l_sm  = _ema(l_ema,  extra_smooth)
+
+#     buy  = (s_sm.shift(1) <= l_sm.shift(1)) & (s_sm > l_sm)   # fast crosses up
+#     sell = (s_sm.shift(1) >= l_sm.shift(1)) & (s_sm < l_sm)   # fast crosses down
+
+#     v["kal_s"]        = k_short
+#     v["kal_l"]        = k_long
+#     v["kal_slope_s"]  = s_sm
+#     v["kal_slope_l"]  = l_sm
+#     v["kal_buy"]      = buy.fillna(False).astype(bool)
+#     v["kal_sell"]     = sell.fillna(False).astype(bool)
+#     return v
+
+
+# ---- TradingView-style EMA (ta.ema) -----------------------------------------
+def _ema_tv(x: pd.Series | np.ndarray, length: int) -> pd.Series:
+    """
+    TradingView ta.ema with alpha = 2/(length+1), causal.
+    If NaNs exist, we treat them as gaps (skip-update); seed with first non-nan.
+    """
+    s = pd.Series(x, copy=False).astype(float)
+    alpha = 2.0 / (length + 1.0)
+    out = np.empty(len(s), dtype=float)
+    out[:] = np.nan
+
+    # seed
+    idx = int(np.where(~np.isnan(s.to_numpy()))[0][0]) if s.notna().any() else None
+    if idx is None:
+        return pd.Series(out, index=s.index)
+    out[idx] = s.iloc[idx]
+
+    # iterate
+    for i in range(idx + 1, len(s)):
+        xi = s.iloc[i]
+        prev = out[i - 1]
+        if np.isnan(xi):
+            out[i] = prev
+        else:
+            out[i] = prev + alpha * (xi - prev)
+
+    return pd.Series(out, index=s.index)
+
+# ---- Pine-style scalar Kalman filter ----------------------------------------
+def _kalman_filter_tv(src: pd.Series, length: int, R: float = 0.01, Q: float = 0.1) -> pd.Series:
+    """
+    Pine-like kalman_filter(close, length, R, Q):
+      var float e=na, var float pe=1.0, var float em=R*length, var float kg=0.0, var float pred=na
+      e := na(e) ? src[1] : e
+      pred := e
+      kg := pe/(pe+em)
+      e := pred + kg*(src - pred)
+      pe := (1-kg)*pe + Q/length
+      e
+
+    Vectorized with a loop; we seed e with the first value of src (closest to src[1] on bar 0).
+    """
+    s = pd.Series(src, copy=False).astype(float)
+    n = len(s)
+    if n == 0:
+        return s
+
+    e = np.empty(n, dtype=float)
+    e[:] = np.nan
+    pe = 1.0
+    em = R * float(length)
+
+    # seed e with first available value (Pine bar0 uses src[1] which is NaN; this is the practical seed)
+    first_idx = int(np.where(~np.isnan(s.to_numpy()))[0][0]) if s.notna().any() else None
+    if first_idx is None:
+        return pd.Series(e, index=s.index)
+    e_val = s.iloc[first_idx]
+
+    for i in range(first_idx, n):
+        pred = e_val
+        kg = pe / (pe + em)
+        xi = s.iloc[i]
+        if np.isnan(xi):
+            # keep previous estimate if price is NaN
+            e_val = pred
+        else:
+            e_val = pred + kg * (xi - pred)
+        pe = (1.0 - kg) * pe + Q / float(length)
+        e[i] = e_val
+
+    return pd.Series(e, index=s.index)
+
+
+# ---- Public: attach Kalman cols exactly like the Pine snippet ----------------
+def attach_kalman_cols(
+    view: pd.DataFrame,
+    *,
+    close_col: str = "close",
+    kf_short_len: int = 50,
+    kf_long_len: int = 150,
+    ema_slope_len: int = 5,
+    slope_smooth_len: int = 12,
+    R: float = 0.01,
+    Q: float = 0.1,
+    scale: float = 10000.0,
+) -> pd.DataFrame:
+    """
+    Adds the following columns to a copy of `view`, matching your Pine defaults:
+
+      short_kf      = kalman_filter(close,  kf_short_len, R, Q)
+      long_kf       = kalman_filter(close,  kf_long_len,  R, Q)
+      short_slope   = ema( short_kf.diff(), ema_slope_len) * scale
+      long_slope    = ema(  long_kf.diff(), ema_slope_len) * scale
+      kal_slope_s   = ema( short_slope,     slope_smooth_len)
+      kal_slope_l   = ema(  long_slope,     slope_smooth_len)
+
+    These two columns are what downstream code (signals/trades) should compare:
+      - is_downtrend = kal_slope_s < kal_slope_l
+      - is_uptrend   = kal_slope_s >= kal_slope_l
+    """
     v = view.copy()
-    # ensure numeric, sorted
-    v = v.sort_values("ts") if "ts" in v.columns else v.sort_index()
-    for c in ("open","high","low","close"):
-        if c in v.columns:
-            v[c] = pd.to_numeric(v[c], errors="coerce")
+    if close_col not in v.columns:
+        raise ValueError(f"attach_kalman_cols: missing '{close_col}' in view")
 
-    k_short = _kalman_filter_series(v["close"], short_len)
-    k_long  = _kalman_filter_series(v["close"], long_len)
+    close = pd.Series(v[close_col], copy=False).astype(float)
 
-    s_raw = k_short - k_short.shift(1)
-    l_raw = k_long  - k_long.shift(1)
+    # Pine-like Kalman filters
+    v["short_kf"] = _kalman_filter_tv(close, kf_short_len, R=R, Q=Q)
+    v["long_kf"]  = _kalman_filter_tv(close, kf_long_len,  R=R, Q=Q)
 
-    def _ema(s, n):
-        return pd.to_numeric(s, errors="coerce").ewm(span=max(1, int(n)), adjust=False).mean()
+    # Raw slopes (1st difference), then EMA smoothing and scale
+    short_kf_slope_raw = v["short_kf"].diff()
+    long_kf_slope_raw  = v["long_kf"].diff()
 
-    s_ema = _ema(s_raw, slope_ema)
-    l_ema = _ema(l_raw,  slope_ema)
-    s_sm  = _ema(s_ema,  extra_smooth)
-    l_sm  = _ema(l_ema,  extra_smooth)
+    short_kf_slope = _ema_tv(short_kf_slope_raw, ema_slope_len) * scale
+    long_kf_slope  = _ema_tv(long_kf_slope_raw,  ema_slope_len) * scale
 
-    buy  = (s_sm.shift(1) <= l_sm.shift(1)) & (s_sm > l_sm)   # fast crosses up
-    sell = (s_sm.shift(1) >= l_sm.shift(1)) & (s_sm < l_sm)   # fast crosses down
+    # Extra slope smoothing (EMA)
+    v["kal_slope_s"] = _ema_tv(short_kf_slope, slope_smooth_len)
+    v["kal_slope_l"] = _ema_tv(long_kf_slope,  slope_smooth_len)
 
-    v["kal_s"]        = k_short
-    v["kal_l"]        = k_long
-    v["kal_slope_s"]  = s_sm
-    v["kal_slope_l"]  = l_sm
-    v["kal_buy"]      = buy.fillna(False).astype(bool)
-    v["kal_sell"]     = sell.fillna(False).astype(bool)
     return v
+
+
+def kalman_cross_masks(view: pd.DataFrame):
+    """
+    Return (v2, long_mask, short_mask) exactly as used by Kalman Cross.
+    long when fast slope > slow slope; short when fast < slow.
+    """
+    v2 = attach_kalman_cols(view)
+    long_mask  = (v2["kal_slope_s"] > v2["kal_slope_l"]).fillna(False)
+    short_mask = (v2["kal_slope_s"] < v2["kal_slope_l"]).fillna(False)
+    return v2, long_mask, short_mask
 
 
 def build_trades_from_masks(view: pd.DataFrame, long_mask: pd.Series, short_mask: pd.Series, *, mode: str = "both", fee: float = 0.002) -> pd.DataFrame:
