@@ -1772,10 +1772,17 @@ def analysis_historical(request, symbol_key: str):
     ema50  = 50 in ema_spans
     ema100 = 100 in ema_spans
     ema_spans = [s for s, ok in ((20, ema20), (50, ema50), (100, ema100)) if ok]
-
+    regdn = request.GET.get("regdn") in {"1","true","on","yes"} or ("regdn" in request.GET)
 
     # 6) Figures (+ markers if LC)
-    fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
+    # fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
+    fig_c = make_candle_fig(
+        view, symbol_key, window, tf,
+        ema_spans=ema_spans,
+        show_regdn=regdn,          # ← add this
+        reg_scope="any_bar",       # ← same scope you used in crypto
+    )
+
     fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
     if strat_key == "lorentzian_advta":
         add_markers_to_candle(fig_c, view, trades_df)

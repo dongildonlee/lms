@@ -15,11 +15,14 @@ from .strategies.kalman import (
 
 import mplfinance as mpf
 
-# inside backend/accounts/analysis_helpers.py
+from accounts.strategies.kalman import attach_kalman_cols
+from accounts.strategies.signals import isKalmanUptrend
+
 try:
-    from .strategies.signals import kalman_regression_down_line
-except ImportError:
-    from accounts.strategies.signals import kalman_regression_down_line
+    # optional; not present in this commit
+    from accounts.strategies.signals import kalman_regression_down_line  # type: ignore
+except Exception:
+    kalman_regression_down_line = None
 
 
 
@@ -374,23 +377,53 @@ def make_candle_fig(
     #             x=view["ts"], y=s, name="Kalman Reg ↓",
     #             mode="lines", line={"width": 1, "dash": "dash"}
     #         ))
+    # --- Kalman regression (down) overlay: concluded straight segments ---
     if show_regdn:
         ensure_kalman_regression_down_cols(view)
         s = view["kal_reg_dn"] if "kal_reg_dn" in view.columns else None
         if s is not None:
-            s = pd.Series(s)  # be sure it's a Series
+            import numpy as np
+            s = pd.Series(s, index=view.index, copy=False)
             if s.notna().any():
-                # Split into contiguous non-NaN segments and alternate colors
-                mask = s.notna()
-                groups = mask.ne(mask.shift(fill_value=False)).cumsum()
+                ts = view["ts"]
+
+                # base mask where we have a valid reg value
+                mask = s.notna().to_numpy()
+                y = s.to_numpy(dtype=float)
+
+                # size of jump between consecutive points
+                dy = np.abs(np.diff(y))
+                # don't consider diffs across NaNs
+                nan_edge = ~mask[1:] | ~mask[:-1]
+                dy[nan_edge] = np.nan
+
+                # robust threshold: large jump = split segment
+                med = np.nanmedian(dy)
+                rng = np.nanmax(y) - np.nanmin(y)
+                thresh = (med * 20.0) if np.isfinite(med) and med > 0 else (
+                        0.01 * rng if np.isfinite(rng) and rng > 0 else 1e-9)
+
+                big_jump = np.where(dy > thresh)[0]  # indices BEFORE the jump
+
+                # Build boundaries: start, every big-jump+1, and end
+                # Also NaN gaps are naturally split because we’ll trim each slice to valid mask
+                boundaries = np.r_[0, big_jump + 1, len(y)]
+
                 colors = ["#ffeb3b", "#ff9800"]  # yellow, orange
                 show_one_legend = True
                 color_idx = 0
-                for gid in groups[mask].unique():
-                    idx = s.index[groups == gid]
+                for k in range(len(boundaries) - 1):
+                    a, b = int(boundaries[k]), int(boundaries[k + 1])  # slice [a, b)
+                    sub_mask = mask[a:b]
+                    if not sub_mask.any():
+                        continue
+                    # trim to valid region inside [a,b)
+                    ii = np.where(sub_mask)[0]
+                    i0, i1 = a + int(ii[0]), a + int(ii[-1])
+
                     fig.add_trace(go.Scatter(
-                        x=view.loc[idx, "ts"],
-                        y=s.loc[idx],
+                        x=ts.iloc[i0:i1 + 1],
+                        y=s.iloc[i0:i1 + 1],
                         name="Kalman Reg ↓",
                         mode="lines",
                         line=dict(width=3, color=colors[color_idx % 2]),  # bold, solid, alternating
@@ -1194,22 +1227,113 @@ def render_all_like_page(
     return render_to_string("accounts/all_like.html", ctx, request=request)
 
 
-def ensure_kalman_regression_down_cols(df_view, *, scope: str = "any_bar") -> None:
-    if "kal_reg_dn" in df_view.columns and "kal_reg_break" in df_view.columns:
-        return
-    line, brk = kalman_regression_down_line(df_view, scope=scope)
-    df_view["kal_reg_dn"] = line
-    df_view["kal_reg_break"] = brk.astype(bool)
+# def ensure_kalman_regression_down_cols(df_view, *, scope: str = "any_bar") -> None:
+#     if "kal_reg_dn" in df_view.columns and "kal_reg_break" in df_view.columns:
+#         return
+#     line, brk = kalman_regression_down_line(df_view, scope=scope)
+#     df_view["kal_reg_dn"] = line
+#     df_view["kal_reg_break"] = brk.astype(bool)
     
     
-# near your other imports
-from accounts.strategies.signals import kalman_regression_down_concluded_line
+# from accounts.strategies.kalman import attach_kalman_cols
+# from accounts.strategies.signals import isKalmanUptrend
+# try:
+#     # Some commits have this helper; some don't.
+#     from accounts.strategies.signals import kalman_regression_down_line  # optional
+# except Exception:
+#     kalman_regression_down_line = None
+
+# def ensure_kalman_regression_down_cols(df_view: pd.DataFrame) -> None:
+#     """
+#     Adds 'kal_reg_dn' as *piecewise straight, concluded* regression-down segments.
+#     """
+#     if "kal_reg_dn" in df_view.columns:
+#         return
+#     df_view["kal_reg_dn"] = kalman_regression_down_concluded_line(df_view)
+
 
 def ensure_kalman_regression_down_cols(df_view: pd.DataFrame) -> None:
     """
-    Adds 'kal_reg_dn' as *piecewise straight, concluded* regression-down segments.
+    Ensure df_view has 'kal_reg_dn' with concluded straight regression-down segments.
+    If kalman_regression_down_line() is unavailable, compute the line inline.
     """
     if "kal_reg_dn" in df_view.columns:
         return
-    df_view["kal_reg_dn"] = kalman_regression_down_concluded_line(df_view)
 
+    if df_view.empty or "close" not in df_view.columns:
+        df_view["kal_reg_dn"] = pd.Series(np.nan, index=df_view.index)
+        return
+
+    # isKalmanUptrend depends on Kalman cols; safe to call repeatedly
+    attach_kalman_cols(df_view)
+
+    # If the project provides a ready-made helper, use it.
+    if callable(kalman_regression_down_line):
+        line, _ = kalman_regression_down_line(df_view)
+        df_view["kal_reg_dn"] = pd.Series(line, index=df_view.index)
+        return
+
+    # ---- Fallback: compute concluded straight segments inline ----
+    close = pd.to_numeric(df_view["close"], errors="coerce")
+    n = len(df_view)
+    out = pd.Series(np.nan, index=df_view.index, name="kal_reg_dn")
+
+    up = isKalmanUptrend(df_view).fillna(False).to_numpy(dtype=bool)
+    if n < 2 or not up.any():
+        df_view["kal_reg_dn"] = out
+        return
+
+    # False->True (start), True->False (end) → concluded uptrends [s,e)
+    ft = np.flatnonzero(~up[:-1] &  up[1:]) + 1
+    tf = np.flatnonzero( up[:-1] & ~up[1:]) + 1
+    starts, ends = [], []
+    i = j = 0
+    while i < len(ft) and j < len(tf):
+        s, e = ft[i], tf[j]
+        if s < e:
+            starts.append(s); ends.append(e); i += 1; j += 1
+        else:
+            j += 1
+    segs = [(s, e) for s, e in zip(starts, ends) if e > s]
+    if not segs:
+        df_view["kal_reg_dn"] = out
+        return
+
+    # peak (max close) per concluded uptrend
+    peaks = []
+    for s, e in segs:
+        seg_vals = close.iloc[s:e].to_numpy()
+        if seg_vals.size == 0 or np.all(np.isnan(seg_vals)):
+            continue
+        k = int(np.nanargmax(seg_vals))
+        peaks.append((s + k, float(close.iat[s + k])))
+
+    if len(peaks) < 2:
+        df_view["kal_reg_dn"] = out
+        return
+
+    # decreasing-peak runs → one fit per concluded run; paint start..(next_peak-1)
+    run_start = None
+    for p in range(1, len(peaks)):
+        i_prev, y_prev = peaks[p-1]
+        i_curr, y_curr = peaks[p]
+        if y_curr < y_prev:
+            if run_start is None:
+                run_start = p - 1
+            xs = np.array([peaks[k][0] for k in range(run_start, p+1)], float)
+            ys = np.array([peaks[k][1] for k in range(run_start, p+1)], float)
+            m, b = np.polyfit(xs, ys, 1)
+
+            # conclude only if next peak violates
+            if p + 1 < len(peaks):
+                i_next, y_next = peaks[p+1]
+                if y_next > (m * float(i_next) + b):
+                    a = peaks[run_start][0]
+                    bnd = max(a, i_next - 1)
+                    seg_ix = np.arange(a, bnd + 1, dtype=int)
+                    out.iloc[seg_ix] = m * seg_ix.astype(float) + b
+                    run_start = None
+        else:
+            run_start = None
+
+    df_view["kal_reg_dn"] = out
