@@ -287,15 +287,74 @@ def build_trades_for_strategy(view: pd.DataFrame, strat_key: str, fee: float) ->
 
 
 
-def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, tf: str) -> go.Figure:
+# def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, tf: str, ema_spans=None) -> go.Figure:
+#     fig = go.Figure()
+#     fig.add_trace(go.Candlestick(
+#         x=view["ts"], open=view["open"], high=view["high"], low=view["low"], close=view["close"],
+#         name=f"{symbol_key}/USD"
+#     ))
+#     # for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
+#     #     if col in view.columns and view[col].notna().any():
+#     #         fig.add_trace(go.Scatter(x=view["ts"], y=view[col], mode="lines", name=label))
+#     # # EMA overlays — optional
+#     # # None -> keep original default (20,50,100) for legacy callers
+#     # # [] or () -> no EMA lines
+#     if ema_spans is None:
+#         ema_spans = (20, 50, 100)
+#     if len(ema_spans) > 0:
+#         ensure_ema_cols(df, spans=tuple(ema_spans))
+#         for span in ema_spans:
+#             col = f"ema{span}"
+#             if col in df.columns:
+#                 fig.add_trace(go.Scatter(
+#                     x=df["ts"], y=df[col], name=f"EMA {span}", mode="lines", line={"width":1}
+#                 ))
+#     fig.update_layout(
+#         title=f"{symbol_key}/USD — {window.start_period.strftime('%Y-%m')} → {window.end_period.strftime('%Y-%m')}  (tf={tf})",
+#         xaxis_rangeslider_visible=True,
+#         hovermode="x unified",
+#         margin=dict(l=40, r=20, t=50, b=30),
+#         legend=dict(orientation="h", y=1.02, x=0, yanchor="bottom", xanchor="left"),
+#     )
+#     fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
+#     fig.update_yaxes(title_text="Price (USD)")
+#     return fig
+
+from typing import Iterable, Optional
+
+
+def make_candle_fig(
+    view: pd.DataFrame,
+    symbol_key: str,
+    window,            # PeriodWindow
+    tf: str,
+    ema_spans: Optional[Iterable[int]] = None,
+) -> go.Figure:
+    """Build a candlestick figure with optional EMA overlays."""
     fig = go.Figure()
+
+    # Candles
     fig.add_trace(go.Candlestick(
         x=view["ts"], open=view["open"], high=view["high"], low=view["low"], close=view["close"],
         name=f"{symbol_key}/USD"
     ))
-    for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
-        if col in view.columns and view[col].notna().any():
-            fig.add_trace(go.Scatter(x=view["ts"], y=view[col], mode="lines", name=label))
+
+    # EMA overlays — optional
+    # None -> legacy default (20,50,100) for callers that haven't been updated.
+    # []   -> no EMA lines (used by ALL/Historical default).
+    if ema_spans is None:
+        ema_spans = (20, 50, 100)
+    ema_spans = list(ema_spans)
+
+    if ema_spans:
+        ensure_ema_cols(view, spans=tuple(ema_spans))
+        for span in ema_spans:
+            col = f"ema{span}"
+            if col in view.columns and view[col].notna().any():
+                fig.add_trace(go.Scatter(
+                    x=view["ts"], y=view[col], name=f"EMA {span}",
+                    mode="lines", line={"width": 1},
+                ))
 
     fig.update_layout(
         title=f"{symbol_key}/USD — {window.start_period.strftime('%Y-%m')} → {window.end_period.strftime('%Y-%m')}  (tf={tf})",
@@ -307,6 +366,7 @@ def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, t
     fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
     fig.update_yaxes(title_text="Price (USD)")
     return fig
+
 
 def make_equity_fig(view: pd.DataFrame, trades_df: pd.DataFrame, symbol_key: str, strat_title: str, tf: str) -> go.Figure:
     fig = go.Figure()
@@ -633,7 +693,7 @@ def ensure_ema_cols(df: pd.DataFrame, spans: tuple[int, ...] = (20, 50, 100)) ->
     for span in spans:
         col = f"ema{span}"
         if col not in df.columns:
-            df[col] = df["close"].ewm(span=span, adjust=False, min_periods=span).mean()
+            df[col] = df["close"].ewm(span=span, adjust=False, min_periods=1).mean()
     return df
 
 
@@ -1031,32 +1091,32 @@ def add_kalman_regression_overlays(
 
 
 
-def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, tf: str,
-                    *, show_kreg: bool = False, kreg_scope: str = "any_bar") -> go.Figure:
-    fig = go.Figure()
-    fig.add_trace(go.Candlestick(
-        x=view["ts"], open=view["open"], high=view["high"], low=view["low"], close=view["close"],
-        name=f"{symbol_key}/USD"
-    ))
-    # existing EMA overlays…
-    for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
-        if col in view.columns and view[col].notna().any():
-            fig.add_trace(go.Scatter(x=view["ts"], y=view[col], mode="lines", name=label))
+# def make_candle_fig(view: pd.DataFrame, symbol_key: str, window: PeriodWindow, tf: str,
+#                     *, show_kreg: bool = False, kreg_scope: str = "any_bar") -> go.Figure:
+#     fig = go.Figure()
+#     fig.add_trace(go.Candlestick(
+#         x=view["ts"], open=view["open"], high=view["high"], low=view["low"], close=view["close"],
+#         name=f"{symbol_key}/USD"
+#     ))
+#     # existing EMA overlays…
+#     for col, label in [("ema20","EMA20"), ("ema50","EMA50"), ("ema100","EMA100")]:
+#         if col in view.columns and view[col].notna().any():
+#             fig.add_trace(go.Scatter(x=view["ts"], y=view[col], mode="lines", name=label))
 
-    # 🔹 optional regression overlay
-    if show_kreg:
-        add_kalman_regression_overlays(fig, view, scope=kreg_scope, show_peaks=True, show_breaks=True)
+#     # 🔹 optional regression overlay
+#     if show_kreg:
+#         add_kalman_regression_overlays(fig, view, scope=kreg_scope, show_peaks=True, show_breaks=True)
 
-    fig.update_layout(  # (unchanged)
-        title=f"{symbol_key}/USD — {window.start_period.strftime('%Y-%m')} → {window.end_period.strftime('%Y-%m')}  (tf={tf})",
-        xaxis_rangeslider_visible=True,
-        hovermode="x unified",
-        margin=dict(l=40, r=20, t=50, b=30),
-        legend=dict(orientation="h", y=1.02, x=0, yanchor="bottom", xanchor="left"),
-    )
-    fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
-    fig.update_yaxes(title_text="Price (USD)")
-    return fig
+#     fig.update_layout(  # (unchanged)
+#         title=f"{symbol_key}/USD — {window.start_period.strftime('%Y-%m')} → {window.end_period.strftime('%Y-%m')}  (tf={tf})",
+#         xaxis_rangeslider_visible=True,
+#         hovermode="x unified",
+#         margin=dict(l=40, r=20, t=50, b=30),
+#         legend=dict(orientation="h", y=1.02, x=0, yanchor="bottom", xanchor="left"),
+#     )
+#     fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1)
+#     fig.update_yaxes(title_text="Price (USD)")
+#     return fig
 
 
 
