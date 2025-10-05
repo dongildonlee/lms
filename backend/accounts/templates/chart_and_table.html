@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>{{ symbol_key }} — Candles & Strategy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b1020;color:#111;padding:16px}
+  a{text-decoration:none}
+  .back{margin-bottom:12px;display:inline-block}
+  .wrap{max-width:1200px;margin:0 auto}
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0 16px}
+  .stack{display:flex;flex-direction:column;gap:24px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:12px}
+  h2{margin:0 0 8px;font-size:20px;font-weight:600;text-align:center}
+  #chart-c,#chart-p{width:100%;height:600px}
+  @media (max-width:700px){ #chart-c,#chart-p{height:420px} }
+  input[type=month]{padding:6px}
+  select,button{padding:6px 10px;cursor:pointer}
+  .hint{color:#6b7280}
+  .btn{display:inline-block;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#f8fafc;color:#111}
+  .btn:hover{background:#eef2ff}
+  .tbl{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+  .tbl thead th{position:sticky;top:0;z-index:1;background:#f8fafc;text-align:left;font-weight:600;border-bottom:1px solid #e5e7eb;padding:8px}
+  .tbl tbody td{border-bottom:1px solid #f1f5f9;padding:8px;white-space:nowrap}
+  .tbl tbody tr:hover{background:#fafafa}
+  .right{text-align:right}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.02em}
+  .badge.long{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+  .badge.short{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+  .pos{color:#16a34a}
+  .neg{color:#dc2626}
+  .th-sort{background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;cursor:pointer}
+  {% comment %} /* Readable text on the dark page background (outside cards) */ {% endcomment %}
+  .back{ color:#9ecbff; }                 
+  .toolbar label{ color:#e6ecff; }        
+  .hint{ color:#94a3b8; }
+  .toolbar-break { flex-basis: 100%; height: 0; }
+               
+</style>
+</head>
+<body>
+<a id="back-link" class="back" href="/crypto">← Back</a>
+<div class="wrap">
+  <form class="toolbar" method="get" action="">
+    <label for="start">Start month:</label>
+    <input type="month" id="start" name="start" min="{{ window.min_month }}" max="{{ window.max_month }}" value="{{ start_val }}">
+    <label for="end">End month:</label>
+    <input type="month" id="end" name="end" min="{{ window.min_month }}" max="{{ window.max_month }}" value="{{ end_val }}">
+    <label for="tf">Timeframe:</label>
+    <select id="tf" name="tf">
+      <option value="5m" {% if tf == '5m' %}selected{% endif %}>5m</option>
+      <option value="1h" {% if tf == '1h' %}selected{% endif %}>1h</option>
+      <option value="4h" {% if tf == '4h' %}selected{% endif %}>4h</option>
+      <option value="1d" {% if tf == '1d' %}selected{% endif %}>1d</option>
+    </select>
+    <label for="strat">Strategy:</label>
+    <select id="strat" name="strat">
+      <option value="ema_stack_long" {{ sel_long }}>EMA Stack — Long</option>
+      <option value="ema_stack_short" {{ sel_short }}>EMA Stack — Short</option>
+      <option value="ema_stack_long_short" {{ sel_both }}>EMA Stack — Long &amp; Short</option>
+      <option value="lorentzian_advta" {{ sel_lc }}>Lorentzian Classification</option>
+      <option value="kalman_cross"  {{ sel_kcross }}>Kalman Cross — Long &amp; Short</option>
+      <option value="kalman_long"  {{ sel_klong }}>Kalman Cross — Long Only</option>
+      <option value="kalman_short" {{ sel_kshort }}>Kalman Cross — Short Only</option>
+    </select>
+    <span class="toolbar-break"></span>
+    <label>EMAs:</label>
+    <label>EMAs:</label>
+    <label><input type="checkbox" name="ema" value="20" {% if 20 in ema_checked %}checked{% endif %}> 20</label>
+    <label><input type="checkbox" name="ema" value="50" {% if 50 in ema_checked %}checked{% endif %}> 50</label>
+    <label><input type="checkbox" name="ema" value="100" {% if 100 in ema_checked %}checked{% endif %}> 100</label>
+
+    <button id="apply", type="submit">Apply</button>
+    <a class="btn" id="nbBtn" href="{{ jupyter_url }}">Open in Jupyter</a>
+    <span class="hint">Available data: {{ window.min_month }} → {{ window.max_month }}</span>
+  </form>
+  <div class="stack">
+    <div class="card"><h2>Candlestick</h2><div id="chart-c"></div></div>
+    <div class="card"><h2>{{ strat_title }}</h2><div id="chart-p"></div></div>
+    <div class="card"><h2>Trades</h2><details open><summary>Show trades table</summary><div style="margin-top:10px; overflow:auto;">{{ table_html|safe }}</div></details></div>
+  </div>
+</div>
+<script>
+  (function() {
+    const params = new URLSearchParams(location.search);
+    const asset = (params.get('asset') || '').toLowerCase();
+    const back = document.getElementById('back-link');
+
+    if (back) {
+      if (asset === 'stock') {
+        back.href = '/stocks';
+        back.textContent = '← Back to stocks';
+      } else {
+        back.href = '/crypto';
+        back.textContent = '← Back to crypto';
+      }
+    }
+  })();
+
+  const figC = JSON.parse('{{ fig_c_json|escapejs }}');
+  const figP = JSON.parse('{{ fig_p_json|escapejs }}');
+  Plotly.newPlot("chart-c", figC.data, figC.layout, {responsive:true});
+  Plotly.newPlot("chart-p", figP.data, figP.layout, {responsive:true});
+
+  function wireAutoY(id) {
+    const gd = document.getElementById(id);
+    let t=null;
+    const kick=()=>{ if(t)clearTimeout(t); t=setTimeout(()=>{Plotly.relayout(gd, {'yaxis.autorange': true});},25); };
+    const touchedX=(ev={})=>Object.keys(ev).some(k=>k.startsWith('xaxis.'));
+    gd.on('plotly_relayout',ev=>{if(touchedX(ev))kick();});
+    gd.on('plotly_relayouting',ev=>{if(touchedX(ev))kick();});
+  }
+  wireAutoY('chart-c'); wireAutoY('chart-p');
+</script>
+<script>{{ js_interactions|safe }}</script>
+</body></html>

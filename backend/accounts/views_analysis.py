@@ -623,11 +623,29 @@ def analysis_all(request, symbol_key: str):
     strat_key = (request.GET.get("strat") or "ema_stack_long").lower()
     if strat_key not in allowed:
         strat_key = "ema_stack_long"
+        
+        
+    # def _on(name: str) -> bool:
+    # # consider the checkbox ON if the key is present at all
+    #     return name in request.GET
+    
+    # --- EMA toggles as a list (default OFF) ---
+    ema_raw = request.GET.getlist("ema")  # e.g. ["20","50"]
+    try:
+        ema_spans = [s for s in (int(x) for x in ema_raw) if s in (20, 50, 100)]
+    except ValueError:
+        ema_spans = []
+
+    # booleans for backwards-compatibility (used by context, if you still need them)
+    ema20  = 20 in ema_spans
+    ema50  = 50 in ema_spans
+    ema100 = 100 in ema_spans
+    ema_spans = [s for s, ok in ((20, ema20), (50, ema50), (100, ema100)) if ok]
 
     trades_df, strat_title = build_trades_for_strategy(view, strat_key, fee)
 
     # figures (unchanged)
-    fig_c = make_candle_fig(view, symbol_key, window, tf)
+    fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
     fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
 
     # overlay markers for LC only (unchanged)
@@ -684,14 +702,14 @@ def analysis_all(request, symbol_key: str):
     "sel_kcross": sel_kcross,
     "sel_klong":  sel_klong,
     "sel_kshort": sel_kshort,
+    
+    "ema20": ema20,
+    "ema50": ema50,
+    "ema100": ema100,
+    "ema_checked": set(ema_spans),
 }
 
     return render(request, "chart_and_table.html", context)
-
-
-
-
-
 
 
 # add at top with imports
@@ -1573,9 +1591,24 @@ def analysis_historical(request, symbol_key: str):
         strat_key = "ema_stack_long"
 
     trades_df, strat_title = build_trades_for_strategy(view, strat_key, fee)
+    
+    
+    # --- EMA toggles from the form (default OFF) ---
+    ema_raw = request.GET.getlist("ema")  # e.g. ["20","50"]
+    try:
+        ema_spans = [s for s in (int(x) for x in ema_raw) if s in (20, 50, 100)]
+    except ValueError:
+        ema_spans = []
+
+    # booleans for backwards-compatibility (used by context, if you still need them)
+    ema20  = 20 in ema_spans
+    ema50  = 50 in ema_spans
+    ema100 = 100 in ema_spans
+    ema_spans = [s for s, ok in ((20, ema20), (50, ema50), (100, ema100)) if ok]
+
 
     # 6) Figures (+ markers if LC)
-    fig_c = make_candle_fig(view, symbol_key, window, tf)
+    fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
     fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
     if strat_key == "lorentzian_advta":
         add_markers_to_candle(fig_c, view, trades_df)
@@ -1617,6 +1650,10 @@ def analysis_historical(request, symbol_key: str):
         "sel_kcross": sel_kcross,
         "sel_klong": sel_klong,
         "sel_kshort": sel_kshort,
+        "ema20": ema20,
+        "ema50": ema50,
+        "ema100": ema100,
+        "ema_checked": set(ema_spans),
     }
 
     return render(request, "chart_and_table.html", context)
