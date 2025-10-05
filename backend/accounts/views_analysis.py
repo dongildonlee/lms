@@ -15,6 +15,7 @@ from .analysis_helpers import add_markers_to_candle, build_trades_for_strategy, 
 from . import views_data
 from django.utils import timezone
 from django.shortcuts import render
+from .strategies.ema_stack import build_trades 
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -641,11 +642,13 @@ def analysis_all(request, symbol_key: str):
     ema50  = 50 in ema_spans
     ema100 = 100 in ema_spans
     ema_spans = [s for s, ok in ((20, ema20), (50, ema50), (100, ema100)) if ok]
+    regdn = request.GET.get("regdn") in {"1","true","on","yes"} or ("regdn" in request.GET)
+
 
     trades_df, strat_title = build_trades_for_strategy(view, strat_key, fee)
 
     # figures (unchanged)
-    fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
+    fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans, show_regdn=regdn, reg_scope="any_bar")
     fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
 
     # overlay markers for LC only (unchanged)
@@ -1218,11 +1221,161 @@ def _write_inspect_notebook(nb_path: Path, price_csv_path: Path, trades_csv_path
 # VIEW: route to Jupyter with preloaded DataFrames
 # URL idea: path("api/analysis/jupyter/<str:symbol_key>/", views.analysis_to_jupyter)
 # ─────────────────────────────────────────────────────────────────────────────
+# def analysis_to_jupyter(request, symbol_key: str):
+#     """
+#     Prepare df_price/df_trades, write temp CSVs + .ipynb, start Jupyter (Lab if available,
+#     else Classic), wait for server, then redirect to the notebook. On failure, show log.
+#     """
+#     # --- params ---
+#     try:
+#         fee = float(request.GET.get("fee", str(FEE_DEFAULT)))
+#     except Exception:
+#         fee = FEE_DEFAULT
+
+#     tf = (request.GET.get("tf") or "5m").lower()
+#     tf = tf if tf in {"5m", "1h", "4h", "1d"} else "5m"
+
+#     strat_key = (request.GET.get("strat") or "ema_stack_long").lower()
+#     if strat_key not in {"ema_stack_long", "ema_stack_short", "ema_stack_long_short"}:
+#         strat_key = "ema_stack_long"
+
+#     symbol_key = (symbol_key or "").upper()
+#     if symbol_key not in SYMBOL_MAP:
+#         return HttpResponseBadRequest("Unsupported symbol")
+    
+
+#     if not csv_path.exists():
+#         return HttpResponseBadRequest(f"CSV not found for {symbol_key}. Click 'Get CSV' first.")
+
+
+#     csv_path = _csv_path(symbol_key)
+#     if not csv_path.exists():
+#         return HttpResponseBadRequest(f"CSV not found for {symbol_key}. Click 'Get CSV' first.")
+
+#     df_full = _load_basic_df(csv_path)
+#     if df_full.empty:
+#         return HttpResponseBadRequest("No data in CSV.")
+
+#     # --- month window (default last 6 months) ---
+#     ts_max = pd.to_datetime(df_full["ts"].max())
+#     start_month_str = request.GET.get("start")
+#     end_month_str   = request.GET.get("end")
+
+#     if not end_month_str:
+#         end_period = ts_max.to_period("M"); start_period = (end_period - 5)
+#     else:
+#         try: end_period = pd.Period(end_month_str, freq="M")
+#         except Exception: end_period = ts_max.to_period("M")
+#     if not start_month_str:
+#         start_period = (end_period - 5)
+#     else:
+#         try: start_period = pd.Period(start_month_str, freq="M")
+#         except Exception: start_period = end_period - 5
+#     if start_period > end_period:
+#         start_period, end_period = end_period, start_period
+
+#     # --- resample + window (ALWAYS via resample_ohlc so EMA columns exist) ---
+#     rule_map = {"5m": None, "1h": "1H", "4h": "4H", "1d": "1D"}
+#     view_all = resample_ohlc(df_full, rule_map[tf])
+
+#     mask = (view_all["ts"].dt.to_period("M") >= start_period) & (view_all["ts"].dt.to_period("M") <= end_period)
+#     view = view_all.loc[mask].reset_index(drop=True)
+#     if view.empty:
+#         return HttpResponseBadRequest("No data in selected window.")
+
+#     # --- build trades ---
+#     if strat_key == "ema_stack_long":
+#         trades = build_trades(view, mode="long", fee=fee)
+#     elif strat_key == "ema_stack_short":
+#         trades = build_trades(view, mode="short", fee=fee)
+#     else:
+#         trades = build_trades(view, mode="both", fee=fee)
+
+#     cols = ["side","entry_i","exit_i","entry_ts","exit_ts","entry_px","exit_px","ret_frac","pnl_frac"]
+#     trades_df = trades.copy() if isinstance(trades, pd.DataFrame) else pd.DataFrame(trades)
+#     for c in cols:
+#         if c not in trades_df.columns:
+#             trades_df[c] = pd.Series(dtype="float64")
+
+#     # --- write temp files ---
+#     tmp_dir = Path(tempfile.mkdtemp(prefix="inspect_nb_"))
+#     price_csv_path  = tmp_dir / f"{symbol_key}_{tf}_{start_period}_{end_period}_price.csv"
+#     trades_csv_path = tmp_dir / f"{symbol_key}_{tf}_{start_period}_{end_period}_trades.csv"
+#     nb_path         = tmp_dir / f"{symbol_key}_{tf}_{start_period}_{end_period}.ipynb"
+
+#     view.to_csv(price_csv_path, index=False)
+#     trades_df.to_csv(trades_csv_path, index=False)
+#     _write_inspect_notebook(nb_path, price_csv_path, trades_csv_path)
+
+#     # --- pick server (Lab preferred) or fail early if neither installed ---
+#     have_lab = _module_available("jupyterlab")
+#     have_nb  = _module_available("notebook")
+#     if not have_lab and not have_nb:
+#         return HttpResponseBadRequest(
+#             "Neither JupyterLab nor Classic Notebook is installed in this virtualenv.\n\n"
+#             "Install one of the following and retry:\n"
+#             "  pip install jupyterlab\n"
+#             "  # or\n"
+#             "  pip install notebook\n"
+#         )
+
+#     host = os.environ.get("JUPYTER_HOST", "127.0.0.1")
+#     port = _pick_free_port(host)
+#     log_path = tmp_dir / "jupyter_server.log"
+#     log_fh = open(log_path, "ab", buffering=0)
+
+#     if have_lab:
+#         cmd = [
+#             sys.executable, "-m", "jupyterlab",
+#             f"--ServerApp.root_dir={str(tmp_dir)}",
+#             "--ServerApp.token=",
+#             "--ServerApp.password=",
+#             "--no-browser",
+#             f"--port={port}",
+#             f"--ip={host}",
+#         ]
+#         final_url = f"http://{host}:{port}/lab/tree/{quote(nb_path.name)}"
+#     else:
+#         cmd = [
+#             sys.executable, "-m", "notebook",
+#             f"--notebook-dir={str(tmp_dir)}",
+#             "--NotebookApp.token=",
+#             "--NotebookApp.password=",
+#             "--no-browser",
+#             f"--port={port}",
+#             f"--ip={host}",
+#         ]
+#         final_url = f"http://{host}:{port}/notebooks/{quote(nb_path.name)}"
+
+#     # --- spawn & wait ---
+#     try:
+#         subprocess.Popen(cmd, stdout=log_fh, stderr=log_fh, cwd=str(tmp_dir))
+#     except Exception as e:
+#         log_fh.close()
+#         return HttpResponseBadRequest(
+#             f"Failed to start Jupyter ({'Lab' if have_lab else 'Notebook'}): {e}\n"
+#             f"Command: {' '.join(cmd)}\n"
+#         )
+
+#     if not _wait_for_port(host, port, timeout=15.0):
+#         log_fh.close()
+#         log_txt = _read_log(str(log_path))
+#         return HttpResponseBadRequest(
+#             "Jupyter server did not start in time (connection refused).\n\n"
+#             f"Command: {' '.join(cmd)}\n"
+#             f"Log file: {log_path}\n\n"
+#             f"--- LOG TAIL ---\n{log_txt}"
+#         )
+
+#     log_fh.close()
+#     return HttpResponseRedirect(final_url)
+
 def analysis_to_jupyter(request, symbol_key: str):
     """
     Prepare df_price/df_trades, write temp CSVs + .ipynb, start Jupyter (Lab if available,
     else Classic), wait for server, then redirect to the notebook. On failure, show log.
     """
+
     # --- params ---
     try:
         fee = float(request.GET.get("fee", str(FEE_DEFAULT)))
@@ -1237,18 +1390,25 @@ def analysis_to_jupyter(request, symbol_key: str):
         strat_key = "ema_stack_long"
 
     symbol_key = (symbol_key or "").upper()
-    if symbol_key not in SYMBOL_MAP:
-        return HttpResponseBadRequest("Unsupported symbol")
-
-    csv_path = _csv_path(symbol_key)
+    if symbol_key in SYMBOL_MAP:
+        csv_path = _csv_path(symbol_key)           # crypto CSV (e.g., btcusd_5m_coinbase.csv)
+        display = f"{symbol_key}/USD"
+    else:
+        p = _find_csv_for_symbol(symbol_key, asset="stock")  # data/stocks/HistoricalData_<SYM>.csv
+        if p is None:
+            return HttpResponseBadRequest("Unsupported symbol")
+        csv_path = p
+        display = symbol_key
     if not csv_path.exists():
         return HttpResponseBadRequest(f"CSV not found for {symbol_key}. Click 'Get CSV' first.")
 
+
+    # --- load raw dataframe ---
     df_full = _load_basic_df(csv_path)
     if df_full.empty:
         return HttpResponseBadRequest("No data in CSV.")
 
-    # --- month window (default last 6 months) ---
+    # --- month window (default to last 6 months) ---
     ts_max = pd.to_datetime(df_full["ts"].max())
     start_month_str = request.GET.get("start")
     end_month_str   = request.GET.get("end")
@@ -1256,13 +1416,19 @@ def analysis_to_jupyter(request, symbol_key: str):
     if not end_month_str:
         end_period = ts_max.to_period("M"); start_period = (end_period - 5)
     else:
-        try: end_period = pd.Period(end_month_str, freq="M")
-        except Exception: end_period = ts_max.to_period("M")
+        try:
+            end_period = pd.Period(end_month_str, freq="M")
+        except Exception:
+            end_period = ts_max.to_period("M")
+
     if not start_month_str:
         start_period = (end_period - 5)
     else:
-        try: start_period = pd.Period(start_month_str, freq="M")
-        except Exception: start_period = end_period - 5
+        try:
+            start_period = pd.Period(start_month_str, freq="M")
+        except Exception:
+            start_period = end_period - 5
+
     if start_period > end_period:
         start_period, end_period = end_period, start_period
 
@@ -1275,7 +1441,7 @@ def analysis_to_jupyter(request, symbol_key: str):
     if view.empty:
         return HttpResponseBadRequest("No data in selected window.")
 
-    # --- build trades ---
+    # --- build trades (EMA strategies only, matching original intent) ---
     if strat_key == "ema_stack_long":
         trades = build_trades(view, mode="long", fee=fee)
     elif strat_key == "ema_stack_short":
@@ -1287,6 +1453,7 @@ def analysis_to_jupyter(request, symbol_key: str):
     trades_df = trades.copy() if isinstance(trades, pd.DataFrame) else pd.DataFrame(trades)
     for c in cols:
         if c not in trades_df.columns:
+            # keep dtype stable; timestamps will be strings if missing
             trades_df[c] = pd.Series(dtype="float64")
 
     # --- write temp files ---
@@ -1605,10 +1772,17 @@ def analysis_historical(request, symbol_key: str):
     ema50  = 50 in ema_spans
     ema100 = 100 in ema_spans
     ema_spans = [s for s, ok in ((20, ema20), (50, ema50), (100, ema100)) if ok]
-
+    regdn = request.GET.get("regdn") in {"1","true","on","yes"} or ("regdn" in request.GET)
 
     # 6) Figures (+ markers if LC)
-    fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
+    # fig_c = make_candle_fig(view, symbol_key, window, tf, ema_spans=ema_spans)
+    fig_c = make_candle_fig(
+        view, symbol_key, window, tf,
+        ema_spans=ema_spans,
+        show_regdn=regdn,          # ← add this
+        reg_scope="any_bar",       # ← same scope you used in crypto
+    )
+
     fig_p = make_equity_fig(view, trades_df, symbol_key, strat_title, tf)
     if strat_key == "lorentzian_advta":
         add_markers_to_candle(fig_c, view, trades_df)
@@ -1654,8 +1828,8 @@ def analysis_historical(request, symbol_key: str):
         "ema50": ema50,
         "ema100": ema100,
         "ema_checked": set(ema_spans),
+        "regdn": regdn,
     }
 
     return render(request, "chart_and_table.html", context)
-
 
