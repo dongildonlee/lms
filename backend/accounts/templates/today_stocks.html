@@ -1,0 +1,130 @@
+{% load static %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Today's Stocks</title>
+  <style>
+    body { background:#0b0f16; color:#e8edf4; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    .wrap { max-width: 1120px; margin: 28px auto; padding: 0 16px; }
+    .toolbar { display:flex; gap:12px; align-items:center; margin-bottom: 16px; flex-wrap: wrap; }
+    .btn { background:#1f2937; color:#e8edf4; border:1px solid #334155; padding:8px 14px; border-radius:10px; text-decoration:none; }
+    .btn:hover { background:#273244; }
+    table { width:100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding:10px 8px; border-bottom:1px solid #1f2937; font-size:14px; }
+    th { text-align:left; color:#9fb3c8; font-weight:600; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #2a3a4f; margin-right:6px;}
+    .ok { background:#14351f; color:#7be495; border-color:#1f5a30; }
+    .warn { background:#37260f; color:#f5c46b; border-color:#5c441a; }
+    .muted { color:#93a4b5; }
+    input#upd-ticker { padding:8px 10px; border-radius:10px; border:1px solid #334155; background:#0b0f16; color:#e8edf4; width:130px; }
+    .upd { display:flex; gap:8px; align-items:center; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="toolbar">
+    <a class="btn" href="{% url 'today_stocks' %}?refresh=1">↻ Refresh &amp; Analyze</a>
+    <a class="btn" href="{% url 'today_stocks' %}">Show Latest Only</a>
+    <a class="btn" href="javascript:history.back()">← Back</a>
+    {% if refreshed %}<span class="muted">Refreshed.</span>{% endif %}
+
+    <!-- Update-one-ticker form -->
+    <form id="upd-form" class="upd">
+        {% csrf_token %}
+      <input id="upd-ticker" name="ticker" type="text" placeholder="AAPL" />
+      <button id="upd-btn" class="btn" type="submit">Update</button>
+      <span id="upd-status" class="muted"></span>
+    </form>
+  </div>
+
+  <h2>Today’s Stocks — Recommendations (score ≥ 2)</h2>
+  <p class="muted">{{ total }} tickers matched.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Timestamp</th>
+        <th>Score</th>
+        <th>Supports</th>
+        <th>BR</th>
+        <th>Kalman</th>
+        <th>SG&nbsp;Long</th>
+        <th>HH/HL</th>
+        <th>LH/LL</th>
+        <th class="muted">Labels</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><strong>{{ r.ticker }}</strong></td>
+        <td>{{ r.ts }}</td>
+        <td>{{ r.score }}</td>
+        <td>
+          {% for s in r.support %}
+            <span class="badge ok">{{ s }}</span>
+          {% endfor %}
+        </td>
+        <td>{{ r.BR|yesno:"✓," }}</td>
+        <td>{{ r.Kalman_Buy|yesno:"✓," }}</td>
+        <td>{{ r.SG_Long|yesno:"✓," }}</td>
+        <td>{{ r.HH|yesno:"✓," }}/{{ r.HL|yesno:"✓," }}</td>
+        <td>{{ r.LH|yesno:"✓," }}/{{ r.LL|yesno:"✓," }}</td>
+        <td class="muted">
+          K={{ r.Kalman_result|default:"—" }}, L={{ r.Loren_result|default:"—" }}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10" class="muted">No matches today.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Inline JS to handle the Update form -->
+<script>
+  (function () {
+    const form   = document.getElementById('upd-form');
+    const input  = document.getElementById('upd-ticker');
+    const btn    = document.getElementById('upd-btn');
+    const status = document.getElementById('upd-status');
+
+    if (!form) return;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ticker = (input.value || '').trim().toUpperCase();
+      if (!ticker) { status.textContent = 'Enter a ticker (e.g., AAPL)'; return; }
+      status.textContent = 'Updating…';
+      btn.disabled = true;
+
+      try {
+        const fd = new FormData();
+        fd.append('ticker', ticker);
+
+        // This URL name must exist in urls.py:
+        //   path("api/today/update", views_analysis.api_today_update, name="api_today_update")
+        const res  = await fetch("{% url 'api_today_update' %}", { method: 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.ok) {
+          status.textContent = `✓ Updated ${data.ticker}`;
+          // If you want to immediately refresh the recommendations list:
+          // location.href = "{% url 'today_stocks' %}?refresh=1";
+        } else {
+          status.textContent = (data && data.error) ? data.error : `Error ${res.status}`;
+        }
+      } catch (err) {
+        status.textContent = String(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

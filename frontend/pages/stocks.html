@@ -5,12 +5,56 @@
   <title>Stocks</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
-    body { font-family: system-ui; padding: 24px; }
+    :root{
+      --bg:#0b1020;
+      --text:#e5e7eb;
+      --muted:#cbd5e1;
+      --border:rgba(255,255,255,.16);
+      --border-strong:rgba(255,255,255,.28);
+      --tab-bg-active:rgba(255,255,255,.06);
+    }
+
+    /* base */
+    body { font-family: system-ui; padding: 24px; background: var(--bg); color: var(--text); }
     h1 { margin: 0 0 12px 0; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border-bottom: 1px solid #e5e7eb; padding: 10px; text-align: left; }
-    .actions a { margin-right: 8px; }
     .container { max-width: 880px; margin: 40px auto; }
+    .muted { color: var(--muted); }
+
+    /* header + back link (keep original appearance) */
+    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
+    .actions a { margin-right: 8px; color: var(--text); text-decoration: none; }
+    .actions a:hover { text-decoration: underline; }
+
+    /* tabs */
+    .tabs {
+      display: flex; gap: 12px; margin: 12px 0 8px;
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .tab {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 12px; margin-bottom: -1px; text-decoration: none;
+      color: var(--text);
+      border: 1px solid transparent; border-bottom: none;
+      border-radius: 10px 10px 0 0;
+    }
+    .tab:hover { color: #ffffff; border-color: var(--border); }
+    .tab.active {
+      color: #ffffff;
+      background: var(--tab-bg-active);
+      border-color: var(--border-strong);
+      border-bottom-color: transparent;
+    }
+
+    /* panels */
+    .panel { padding-top: 12px; }
+
+    /* tables */
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; color: var(--text); }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px; text-align: left; }
+    th { font-weight: 600; color: var(--muted); }
+    .actions { white-space: nowrap; }
+    .btn { color: var(--text); text-decoration: none; }
+    .btn:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -21,22 +65,119 @@
         <a class="btn secondary" href="/dashboard">← Back to dashboard</a>
       </div>
     </div>
-  
-    <p>Pick a ticker to open charts/analysis.</p>
-  
-    <table id="tbl-stocks">
-      <thead>
-        <tr>
-          <th>Ticker</th>
-          <th class="actions">Actions</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-stocks"></tbody>
-    </table>
-  
-    <!-- keep these where they are if you don’t want to edit <head> right now -->
+
+    <nav class="tabs">
+      <a id="tab-tickers" class="tab" href="#tickers">Tickers</a>
+      <a id="tab-today"   class="tab" href="#today">Today’s Stocks</a>
+    </nav>
+
+    <!-- Tickers panel -->
+    <section class="panel" id="panel-tickers" hidden>
+      <p class="muted">Pick a ticker to open charts/analysis.</p>
+      <table id="tbl-stocks">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th class="actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-stocks"></tbody>
+      </table>
+    </section>
+
+    <!-- Today's Stocks panel -->
+    <section class="panel" id="panel-today" hidden>
+      <div class="actions" style="margin-bottom:8px;">
+        <!-- point these at your Django endpoints -->
+        <a class="btn" href="/api/today_stocks">Open Today’s Stocks</a>
+        <a class="btn" href="/api/today_stocks?refresh=1">↻ Refresh & Analyze</a>
+      
+        <form id="ticker-form" style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+          <input id="ticker-input" type="text" placeholder="Ticker (e.g., AAPL)" 
+                 autocomplete="off" spellcheck="false"
+                 style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.28);
+                        color:#e5e7eb;border-radius:8px;padding:8px 10px;outline:none;">
+          <button class="btn" type="submit">Update</button>
+        </form>
+      
+      </div>
+      <table id="tbl-today">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Score / Signals</th>
+            <th>Why</th>
+            <th class="actions">Open</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-today"></tbody>
+      </table>
+      <p id="today-empty" class="muted" style="margin-top:8px;">No results yet. Click “Open” or “Refresh & Analyze”.</p>
+    </section>
+
+    <!-- keep existing includes -->
     <link rel="stylesheet" href="/static/css/styles.css">
     <script src="/static/js/stocks.js"></script>
-  </div>  
+    <script>
+      // Tab switching (hash-based)
+      function setTab(hash) {
+        const h = (hash || location.hash || '#tickers').toLowerCase();
+        const onTickers = (h === '#tickers');
+
+        // toggle panels
+        document.getElementById('panel-tickers').hidden = !onTickers;
+        document.getElementById('panel-today').hidden   =  onTickers;
+
+        // toggle active tab visuals
+        document.getElementById('tab-tickers').classList.toggle('active', onTickers);
+        document.getElementById('tab-today').classList.toggle('active', !onTickers);
+
+        // load today's table when switching to that tab
+        if (!onTickers) loadToday();
+      }
+
+      window.addEventListener('hashchange', () => setTab());
+
+      // turn tab clicks into hash changes (prevents page reload)
+      document.getElementById('tab-tickers').addEventListener('click', (e) => {
+        e.preventDefault(); location.hash = '#tickers';
+      });
+      document.getElementById('tab-today').addEventListener('click', (e) => {
+        e.preventDefault(); location.hash = '#today';
+      });
+
+      // initial state
+      setTab();
+
+      // Optional JSON loader for Today tab
+      async function loadToday() {
+        try {
+          const res = await fetch('/api/today_stocks', { headers: { 'Accept': 'application/json' }});
+          if (!res.ok) return;
+          const data = await res.json(); // expecting [{ticker, score, why, url}]
+          const tbody = document.getElementById('tbody-today');
+          const empty = document.getElementById('today-empty');
+          tbody.innerHTML = '';
+          if (!data || !data.length) { empty.style.display = ''; return; }
+          empty.style.display = 'none';
+          for (const row of data) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${row.ticker ?? ''}</td>
+              <td>${row.score ?? ''}</td>
+              <td>${row.why ?? ''}</td>
+              <td class="actions"><a class="btn" href="${row.url ?? '#'}" target="_blank">Open</a></td>`;
+            tbody.appendChild(tr);
+          }
+        } catch (_) {
+          // swallow fetch errors for now
+        }
+      }
+    </script>
+  </div>
 </body>
 </html>
+
+
+
+
