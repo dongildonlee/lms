@@ -48,6 +48,8 @@ urlpatterns = [
 
     path("stocks/today/", views_pages.stocks_today, name="stocks_today"),
     path("api/today/csv_symbols", views_analysis.api_today_csv_symbols, name="api_today_csv_symbols"),
+    path("api/today/recommendations",  views_analysis.api_today_recommendations, name="api_today_recommendations"),
+
 ]
 
 if settings.DEBUG:

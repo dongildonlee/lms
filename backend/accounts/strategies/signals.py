@@ -402,17 +402,17 @@ def is_broke_above_resis(df: pd.DataFrame):
             if not run_active:
                 peaks = [(prev_idx, prev_px), (curr_idx, curr_px)]
                 run_active = True
-                print("\n▶ a new regression downtrend")
+                #print("\n▶ a new regression downtrend")
             else:
                 peaks.append((curr_idx, curr_px))
-                print("\n↻ update regression downtrend")
+                #print("\n↻ update regression downtrend")
 
             xs = np.array([p[0] for p in peaks], dtype=float)
             ys = np.array([p[1] for p in peaks], dtype=float)
             m, b = np.polyfit(xs, ys, 1)
 
-            print(f"Peaks [{len(peaks)}]: {fmt_peaks(peaks)}")
-            print(f"Slope: {m:.6g}")
+            #print(f"Peaks [{len(peaks)}]: {fmt_peaks(peaks)}")
+            #print(f"Slope: {m:.6g}")
 
             # ---- Update predictions (no look-ahead) ----
             # start one bar AFTER the current uptrend concludes
