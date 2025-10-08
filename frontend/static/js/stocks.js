@@ -766,6 +766,24 @@ async function tb_fetchRowsFromAPI(watchlist, days=60){
   }catch{ return []; }
 }
 
+async function ts_fetchRowsFromAPI(watchlist, days = 60) {
+  if (!Array.isArray(watchlist) || !watchlist.length) return [];
+  try {
+    const res = await fetch("/api/today/recommendations/sell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ symbols: watchlist, days })
+    });
+    const js = await res.json().catch(() => ({}));
+    if (!res.ok || !js.ok) return [];
+    // rows: [{date, sells, signals, other}] newest-first
+    return Array.isArray(js.rows) ? js.rows : [];
+  } catch {
+    return [];
+  }
+}
+
+
 // minimal placeholder (only if API returns nothing)
 function tb_buildRowsPlaceholder(days=10){
   const out=[], today=new Date(); today.setHours(0,0,0,0);
@@ -849,6 +867,174 @@ async function tb_refresh($root){
   $root.__tb_state = state;
 }
 
+
+// ====== SELL TABLE SCAFFOLD (structure only; signals wired next) ======
+const TS_PAGE_SIZE = 10; // 10 dates per page
+
+// function ts_buildRows(days = 60) {
+//   // For now, just mirror the date range used by buy table; empty sell columns.
+//   const out = [];
+//   const today = new Date(); today.setHours(0,0,0,0);
+//   for (let d = 0; d < days; d++) {
+//     const dt = new Date(today.getTime() - d * 86400000);
+//     const iso = dt.toISOString().slice(0,10);
+//     out.push({ date: iso, sells: [], signals: [], other: [] });
+//   }
+//   return out; // newest first
+// }
+
+function ts_renderPage($root, state) {
+  const $tbody = $root.querySelector("#ts-body");
+  const $pages = $root.querySelector("#ts-pages");
+  if (!$tbody || !$pages) return;
+
+  const start = state.page * TS_PAGE_SIZE;
+  const end   = Math.min(start + TS_PAGE_SIZE, state.rows.length);
+  const slice = state.rows.slice(start, end);
+
+  // body
+  $tbody.innerHTML = "";
+  for (const row of slice) {
+    const tr = document.createElement("tr");
+
+    const tdDate = document.createElement("td");
+    tdDate.textContent = row.date;
+
+    const tdSell = document.createElement("td");
+    if (row.sells.length) {
+      for (const s of row.sells) {
+        const span = document.createElement("span");
+        span.className = "pill buy";  // reuse pill style
+        span.textContent = s;
+        tdSell.appendChild(span);
+      }
+    } else {
+      tdSell.innerHTML = "<span class='hint'>—</span>";
+    }
+
+    const tdSig = document.createElement("td");
+    if (row.signals.length) {
+      for (const s of row.signals) {
+        const span = document.createElement("span");
+        span.className = "pill sig";
+        span.textContent = s;
+        tdSig.appendChild(span);
+      }
+    } else {
+      tdSig.innerHTML = "<span class='hint'>—</span>";
+    }
+
+    const tdOther = document.createElement("td");
+    if (row.other.length) {
+      for (const s of row.other) {
+        const span = document.createElement("span");
+        span.className = "pill other";
+        span.textContent = s;
+        tdOther.appendChild(span);
+      }
+    } else {
+      tdOther.innerHTML = "<span class='hint'>—</span>";
+    }
+
+    tr.appendChild(tdDate);
+    tr.appendChild(tdSell);
+    tr.appendChild(tdSig);
+    tr.appendChild(tdOther);
+    $tbody.appendChild(tr);
+  }
+
+  // pagination numbers
+  $pages.innerHTML = "";
+  const totalPages = Math.max(1, Math.ceil(state.rows.length / TS_PAGE_SIZE));
+  for (let i = 0; i < totalPages; i++) {
+    const btn = document.createElement("button");
+    btn.className = "page-btn" + (i === state.page ? " active" : "");
+    btn.type = "button";
+    btn.textContent = String(i + 1);
+    btn.addEventListener("click", () => {
+      state.page = i;
+      ts_updateNav($root, state);
+      ts_renderPage($root, state);
+      $root.querySelector("#ts-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    $pages.appendChild(btn);
+  }
+}
+
+function ts_init($root) {
+  const state = { rows: [], page: 0 };
+  $root.__ts_state = state;
+  ts_updateNav($root, state);
+  ts_renderPage($root, state);
+  // first real fetch
+  ts_refresh($root);
+}
+
+async function ts_refresh($root) {
+  if (!$root) return;
+  const state = $root.__ts_state || { rows: [], page: 0 };
+
+  const symbols = wlLoad();
+  if (!symbols.length) {
+    state.rows = [];
+    ts_updateNav($root, state);
+    ts_renderPage($root, state);
+    $root.__ts_state = state;
+    return;
+  }
+
+  try {
+    state.rows = await ts_fetchRowsFromAPI(symbols, 60);
+    const totalPages = Math.max(1, Math.ceil(state.rows.length / (typeof TS_PAGE_SIZE !== "undefined" ? TS_PAGE_SIZE : 10)));
+    state.page = Math.min(state.page, totalPages - 1);
+  } catch (err) {
+    console.error("Sell rows fetch failed:", err);
+    state.rows = [];
+  }
+
+  ts_updateNav($root, state);
+  ts_renderPage($root, state);
+  $root.__ts_state = state;
+}
+
+
+function ts_updateNav($root, state) {
+  const totalPages = Math.max(1, Math.ceil(state.rows.length / TS_PAGE_SIZE));
+  const $prev = $root.querySelector("#ts-prev");
+  const $next = $root.querySelector("#ts-next");
+  if ($prev) {
+    $prev.disabled = (state.page <= 0);
+    $prev.onclick = () => {
+      if (state.page > 0) { state.page -= 1; ts_updateNav($root, state); ts_renderPage($root, state); }
+    };
+  }
+  if ($next) {
+    $next.disabled = (state.page >= totalPages - 1);
+    $next.onclick = () => {
+      if (state.page < totalPages - 1) { state.page += 1; ts_updateNav($root, state); ts_renderPage($root, state); }
+    };
+  }
+}
+
+// function ts_init($root) {
+//   const state = { rows: ts_buildRows(60), page: 0 };
+//   ts_updateNav($root, state);
+//   ts_renderPage($root, state);
+//   $root.__ts_state = state;
+// }
+
+// function ts_refresh($root) {
+//   if (!$root) return;
+//   const state = $root.__ts_state || { page: 0 };
+//   state.rows = ts_buildRows(60);
+//   state.page = Math.min(state.page, Math.max(0, Math.ceil(state.rows.length / TS_PAGE_SIZE) - 1));
+//   ts_updateNav($root, state);
+//   ts_renderPage($root, state);
+//   $root.__ts_state = state;
+// }
+
+
+
 // ---------------------------
 // Wire the fragment (once)
 // ---------------------------
@@ -868,18 +1054,31 @@ function initTodayFragment($root){
   $list?.addEventListener("click", (e) => {
     const li = e.target.closest(".wl-item"); if (!li) return;
     const sym = li.dataset.sym;
-    if (e.target.classList.contains("wl-remove")){ wlRemove(sym); wlRender($root); tb_refresh($root); $status && ($status.textContent=`Removed ${sym}`); }
-    else { if ($input) $input.value = sym; }
+    if (e.target.classList.contains("wl-remove")){
+      wlRemove(sym);
+      wlRender($root);
+      // refresh BOTH tables
+      tb_refresh($root);
+      ts_refresh($root);
+      $status && ($status.textContent=`Removed ${sym}`);
+    } else {
+      if ($input) $input.value = sym;
+    }
   });
 
   // Dropdown + add
   $add?.addEventListener("click", () => {
     const sym = ($ddl?.value||"").trim().toUpperCase(); if (!sym) return;
-    wlAdd(sym); wlRender($root); tb_refresh($root); $status && ($status.textContent=`Added ${sym}`);
+    wlAdd(sym);
+    wlRender($root);
+    // refresh BOTH tables
+    tb_refresh($root);
+    ts_refresh($root);
+    $status && ($status.textContent=`Added ${sym}`);
   });
   loadCsvSymbolsInto($root);
 
-  // Search -> update CSV then refresh table
+  // Search -> update CSV then refresh tables
   $form?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const ticker = ($input?.value||"").trim().toUpperCase();
@@ -890,28 +1089,46 @@ function initTodayFragment($root){
       const fd=new FormData(); fd.append("ticker", ticker);
       const res = await fetch("/api/today/update", { method:"POST", headers:{ "X-CSRFToken": csrf }, body: fd });
       const js  = await res.json().catch(()=> ({}));
-      if (res.ok && js.ok){ wlAdd(ticker); wlRender($root); await tb_refresh($root); $status && ($status.textContent=`✓ ${ticker} updated`); }
-      else { $status && ($status.textContent = js?.error || `Error ${res.status}`); }
-    }catch(err){ $status && ($status.textContent=String(err)); }
-    finally{ if ($btn) $btn.disabled=false; }
+      if (res.ok && js.ok){
+        wlAdd(ticker);
+        wlRender($root);
+        // refresh BOTH tables
+        await tb_refresh($root);
+        await ts_refresh($root);
+        $status && ($status.textContent=`✓ ${ticker} updated`);
+      } else {
+        $status && ($status.textContent = js?.error || `Error ${res.status}`);
+      }
+    }catch(err){
+      $status && ($status.textContent=String(err));
+    } finally {
+      if ($btn) $btn.disabled=false;
+    }
   });
 
-  // First render of table + background auto-update of WL, then table refresh
+  // First render of BOTH tables
   tb_init($root);
+  ts_init($root);   // <-- add this
+
+  // Background auto-update of WL, then refresh BOTH
   (async () => {
     const wl = wlLoad(); if (!wl.length) return;
     $status && ($status.textContent = `Updating ${wl.length} tickers…`);
     const BATCH=5;
     for (let i=0;i<wl.length;i+=BATCH){
-      await Promise.allSettled(wl.slice(i,i+BATCH).map(async sym=>{
-        const fd=new FormData(); fd.append("ticker", sym);
-        await fetch("/api/today/update", { method:"POST", headers:{ "X-CSRFToken": csrf }, body: fd });
-      }));
+      await Promise.allSettled(
+        wl.slice(i,i+BATCH).map(async sym=>{
+          const fd=new FormData(); fd.append("ticker", sym);
+          await fetch("/api/today/update", { method:"POST", headers:{ "X-CSRFToken": csrf }, body: fd });
+        })
+      );
     }
     $status && ($status.textContent = "Watchlist up to date.");
     await tb_refresh($root);
+    await ts_refresh($root);  // <-- add this
   })();
 }
+
 
 // ---------------------------
 // Init

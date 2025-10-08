@@ -77,36 +77,63 @@
     <div class="hint">Hover a ticker to remove it. Click a ticker to copy it into the search box.</div>
   </aside>
 
-  <!-- Right: Today's Buy table -->
+  <!-- Right column: Buy + Sell tables -->
   <div class="frag-content">
-    <div class="card" id="tb-card">
-      <div class="card-header">
-        <div class="card-title">Today’s buy</div>
-        <div class="pager">
-          <button class="btn-sm" id="tb-prev" type="button">&lt;</button>
-          <button class="btn-sm" id="tb-next" type="button">&gt;</button>
-        </div>
-      </div>
-
-      <table class="tbl" id="tb-table">
-        <thead>
-          <tr>
-            <th style="width:120px;">Date</th>
-            <th>Buy</th>
-            <th>Signals met</th>
-            <th>Other signals</th>
-          </tr>
-        </thead>
-        <tbody id="tb-body">
-          <!-- rows injected by JS -->
-        </tbody>
-      </table>
-
-      <div class="pagination" id="tb-pages">
-        <!-- page numbers injected by JS -->
+  <!-- Today’s Buy -->
+  <div class="card" id="tb-card">
+    <div class="card-header">
+      <div class="card-title">Today’s buy</div>
+      <div class="pager">
+        <button class="btn-sm" id="tb-prev" type="button">&lt;</button>
+        <button class="btn-sm" id="tb-next" type="button">&gt;</button>
       </div>
     </div>
+
+    <table class="tbl" id="tb-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Date</th>
+          <th>Buy</th>
+          <th>Signals met</th>
+          <th>Other signals</th>
+        </tr>
+      </thead>
+      <tbody id="tb-body"><!-- rows injected by JS --></tbody>
+    </table>
+
+    <div class="pagination" id="tb-pages"><!-- page numbers injected by JS --></div>
   </div>
+
+  <!-- Today’s Sell -->
+  <div class="card" id="ts-card" style="margin-top:16px;">
+    <div class="card-header">
+      <div class="card-title">Today’s sell</div>
+      <div class="pager">
+        <button class="btn-sm" id="ts-prev" type="button">&lt;</button>
+        <button class="btn-sm" id="ts-next" type="button">&gt;</button>
+      </div>
+    </div>
+
+    <table class="tbl" id="ts-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Date</th>
+          <th>Sell</th>
+          <th>Signals met</th>
+          <th>Other signals</th>
+        </tr>
+      </thead>
+      <tbody id="ts-body"><!-- rows injected by JS --></tbody>
+    </table>
+
+    <div class="pagination" id="ts-pages"><!-- page numbers injected by JS --></div>
+  </div>
+</div>
+
+    
+
+  </div>
+</div>
 </div>
 
 
