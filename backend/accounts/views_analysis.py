@@ -3,8 +3,9 @@ from pathlib import Path
 import json
 import pandas as pd
 import plotly.graph_objects as go
-from django.http import JsonResponse
-from django.http import HttpResponse, HttpResponseBadRequest 
+from django.http import JsonResponse, HttpRequest
+from django.http import HttpResponse, HttpResponseBadRequest
+ 
 from string import Template
 from html import escape  # (you already use escape below; keep this too)
 from django.urls import reverse
@@ -16,7 +17,8 @@ from . import views_data
 from django.utils import timezone
 from django.shortcuts import render
 from .strategies.ema_stack import build_trades 
-
+from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import csrf_exempt
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -1833,3 +1835,36 @@ def analysis_historical(request, symbol_key: str):
 
     return render(request, "chart_and_table.html", context)
 
+
+try:
+    from .nasdaq import update_symbol
+except ImportError:
+    from accounts.nasdaq import update_symbol
+
+
+
+@require_GET
+def api_today_stocks(request: HttpRequest):
+   """
+   Minimal payload to satisfy the page’s initial fetch.
+   You can swap this list for your real logic later.
+   """
+   items = [{"symbol": s} for s in ["AAPL","MSFT","NVDA","TSLA","AMZN","GOOGL","META","AMD","NFLX","AVGO"]]
+   return JsonResponse({"ok": True, "total": len(items), "items": items})
+
+
+@require_POST
+def api_today_update(request: HttpRequest):
+   sym = (request.POST.get("ticker") or "").upper().strip()
+   if not sym.isalnum():
+       return JsonResponse({"ok": False, "error": "Invalid ticker."}, status=400)
+   try:
+       data = update_symbol(sym)
+       if not isinstance(data, dict):
+           return JsonResponse({"ok": False, "error": "Unexpected response from updater."}, status=500)
+       # If there are simply no new rows, keep it 200 so the UI shows “+0”
+       status_code = 200 if data.get("ok") else 404 if "No rows" in str(data.get("error", "")) else 500
+       return JsonResponse(data, status=status_code)
+   except Exception as e:
+       # optional: add logging here
+       return JsonResponse({"ok": False, "error": str(e)}, status=500)

@@ -1,0 +1,56 @@
+<div class="toolbar" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding-top:8px">
+  <form id="upd-form" class="upd" autocomplete="off" method="post" style="display:flex;gap:8px;align-items:center">
+    {% csrf_token %}
+    <input id="upd-ticker" name="ticker" placeholder="AAPL"
+           style="background:transparent;border:1px solid rgba(255,255,255,.28);color:#e5e7eb;padding:8px 10px;border-radius:8px;width:160px" />
+    <button id="upd-btn" type="submit"
+            style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.28);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer">
+      Update
+    </button>
+    <span id="upd-status" class="muted" style="margin-left:6px;color:#cbd5e1"></span>
+  </form>
+</div>
+
+<script>
+(function(){
+  const form   = document.getElementById('upd-form');
+  const input  = document.getElementById('upd-ticker');
+  const btn    = document.getElementById('upd-btn');
+  const status = document.getElementById('upd-status');
+  if(!form) return;
+
+  // use the server-rendered token inside the fragment
+  const csrf = form.querySelector('input[name=csrfmiddlewaretoken]')?.value || '';
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const ticker = (input.value || '').trim().toUpperCase();
+    if (!ticker) { status.textContent = 'Enter a ticker (e.g., AAPL)'; return; }
+    btn.disabled = true; status.textContent = 'Updating…';
+
+    try {
+      const fd = new FormData();
+      fd.append('ticker', ticker);
+      const res = await fetch('/api/today/update', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: fd
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        status.textContent = `✓ ${data.ticker}: +${data.rows_added} (total ${data.total_rows ?? '—'})`;
+      } else {
+        status.textContent = (data && data.error) ? data.error : `Error ${res.status}`;
+      }
+    } catch (err) {
+      status.textContent = String(err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+
+
+
+

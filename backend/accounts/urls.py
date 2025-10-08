@@ -5,7 +5,7 @@ from .views_update import api_get_csv
 from . import views_analysis as va
 from . import views_data
 from .views_analysis import analysis_candles, analysis_cumprofit, analysis_all
-
+from accounts import views_analysis
 
 urlpatterns = [
     path("signup/", signup, name="signup"),
@@ -19,4 +19,6 @@ urlpatterns = [
     path("analysis/fill_csv/<str:symbol>/",  views_data.analysis_fill_csv,  name="analysis_fill_csv"),
     path("analysis/check_historical_csv/<str:symbol>/", va.analysis_check_historical_csv, name="analysis_check_historical_csv"),
     path("analysis/historical/<str:symbol_key>/", va.analysis_historical, name="analysis_historical"),
+    # path("api/today/update", views_analysis.api_today_update, name="api_today_update"),
+    # path("api/today_stocks", views_analysis.api_today_stocks, name="api_today_stocks"),
 ]
