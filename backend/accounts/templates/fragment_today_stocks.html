@@ -1,55 +1,70 @@
-<div class="toolbar" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding-top:8px">
-  <form id="upd-form" class="upd" autocomplete="off" method="post" style="display:flex;gap:8px;align-items:center">
-    {% csrf_token %}
-    <input id="upd-ticker" name="ticker" placeholder="AAPL"
-           style="background:transparent;border:1px solid rgba(255,255,255,.28);color:#e5e7eb;padding:8px 10px;border-radius:8px;width:160px" />
-    <button id="upd-btn" type="submit"
-            style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.28);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer">
-      Update
-    </button>
-    <span id="upd-status" class="muted" style="margin-left:6px;color:#cbd5e1"></span>
-  </form>
+{# FRAGMENT: Watchlist + Search + CSV-backed dropdown #}
+<style>
+  .frag-layout { display:grid; grid-template-columns:300px 1fr; gap:24px; align-items:start; }
+  @media (max-width:800px){ .frag-layout { grid-template-columns:1fr; } }
+
+  .sidebar { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .sidebar h3 { font-size:16px; margin:0 0 12px; color:#1e293b; font-weight:700; letter-spacing:.02em; }
+
+  .wl-controls { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  .wl-select { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; background:#fff; color:#0f172a; }
+  .wl-add { border:1px solid #e5e7eb; background:#fff; color:#0f172a; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  .wl-add:hover { background:#f8fafc; }
+
+  /* search (now under dropdown) */
+  .wl-search { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+  #upd-ticker { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; background:#fff; color:#0f172a; }
+  #upd-btn { border:1px solid #e5e7eb; background:#fff; color:#0f172a; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  #upd-btn[disabled]{ opacity:.6; cursor:not-allowed; }
+  #upd-status { color:#64748b; font-size:13px; margin: 4px 0 10px; }
+
+  .wl-list { list-style:none; padding:0; margin:0; }
+  .wl-item { display:flex; align-items:center; justify-content:space-between; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; margin-bottom:8px; background:#fff; cursor:pointer; }
+  .wl-item:hover { background:#f8fafc; }
+  .wl-sym { font-weight:700; color:#0f172a; letter-spacing:.02em; }
+  .wl-remove { border:1px solid #e5e7eb; background:#fff; color:#334155; border-radius:999px; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; line-height:1; cursor:pointer; opacity:0; transition:opacity .15s ease; }
+  .wl-item:hover .wl-remove { opacity:1; }
+
+  .sec-title { font-size:13px; font-weight:700; color:#334155; margin:10px 0 6px; text-transform:uppercase; letter-spacing:.04em; }
+  .hint { color:#64748b; font-size:13px; margin-top:8px; }
+</style>
+
+<div class="frag-layout">
+  <!-- Sidebar: Watchlist -->
+  <aside class="sidebar" id="wl">
+    <h3>Watchlist</h3>
+
+    <!-- Dropdown + + button -->
+    <div class="wl-controls">
+      <select id="wl-dropdown" class="wl-select">
+        <option value="">Loading…</option>
+      </select>
+      <button id="wl-add-btn" class="wl-add" type="button">+</button>
+    </div>
+
+    <!-- Search moved here (under dropdown) -->
+    <form id="upd-form" class="wl-search" autocomplete="off" method="post">
+      {% csrf_token %}
+      <input id="upd-ticker" name="ticker" placeholder="AAPL" />
+      <button id="upd-btn" type="submit">Search</button>
+    </form>
+    <div id="upd-status" class="hint"></div>
+
+    <div class="sec-title">Your tickers</div>
+    <ul class="wl-list" id="wl-list"></ul>
+
+    <div class="sec-title">Today’s buy</div>
+    <ul class="wl-list" id="today-buy"></ul>
+
+    <div class="hint">Hover a ticker to remove it. Click a ticker to copy it into the search box.</div>
+  </aside>
+
+  <!-- Right column kept for future content -->
+  <div class="frag-content"></div>
 </div>
 
-<script>
-(function(){
-  const form   = document.getElementById('upd-form');
-  const input  = document.getElementById('upd-ticker');
-  const btn    = document.getElementById('upd-btn');
-  const status = document.getElementById('upd-status');
-  if(!form) return;
 
-  // use the server-rendered token inside the fragment
-  const csrf = form.querySelector('input[name=csrfmiddlewaretoken]')?.value || '';
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const ticker = (input.value || '').trim().toUpperCase();
-    if (!ticker) { status.textContent = 'Enter a ticker (e.g., AAPL)'; return; }
-    btn.disabled = true; status.textContent = 'Updating…';
-
-    try {
-      const fd = new FormData();
-      fd.append('ticker', ticker);
-      const res = await fetch('/api/today/update', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrf },
-        body: fd
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        status.textContent = `✓ ${data.ticker}: +${data.rows_added} (total ${data.total_rows ?? '—'})`;
-      } else {
-        status.textContent = (data && data.error) ? data.error : `Error ${res.status}`;
-      }
-    } catch (err) {
-      status.textContent = String(err);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-})();
-</script>
 
 
 
