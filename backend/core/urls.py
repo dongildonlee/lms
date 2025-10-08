@@ -47,6 +47,7 @@ urlpatterns = [
     #path("stocks-clean/", views_pages.stocks_clean, name="stocks_clean"),
 
     path("stocks/today/", views_pages.stocks_today, name="stocks_today"),
+    path("api/today/csv_symbols", views_analysis.api_today_csv_symbols, name="api_today_csv_symbols"),
 ]
 
 if settings.DEBUG:

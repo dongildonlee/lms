@@ -1868,3 +1868,48 @@ def api_today_update(request: HttpRequest):
    except Exception as e:
        # optional: add logging here
        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+import logging
+
+
+logger = logging.getLogger(__name__)
+
+@require_GET
+def api_today_csv_symbols(request):
+    """
+    Return all tickers that have a CSV on disk:
+    HistoricalData_<TICKER>.csv
+    We try multiple likely roots and pick the first that exists.
+    """
+    #print("DEBUG: api_today_csv_symbols called")
+
+    
+    try:
+        here = Path(__file__).resolve()
+        candidates = [
+            # most accurate for your tree: backend/data/stocks
+            here.parents[1] / "data" / "stocks",              # backend/data/stocks
+            here.parents[2] / "data" / "stocks",              # lms/data/stocks (just in case)
+        ]
+
+        stocks_dir = next((p for p in candidates if p.exists()), None)
+
+        if not stocks_dir:
+            # Return an empty list rather than hanging
+            logger.warning("api_today_csv_symbols: no stocks dir found in %s", candidates)
+            return JsonResponse({"ok": True, "symbols": [], "count": 0, "path": None})
+
+        symbols = []
+        # Fast glob through HistoricalData_*.csv
+        for p in stocks_dir.glob("HistoricalData_*.csv"):
+            stem = p.stem  # e.g. HistoricalData_AAPL
+            t = stem.replace("HistoricalData_", "", 1).strip().upper()
+            if t and t.isalnum():
+                symbols.append(t)
+
+        symbols = sorted(set(symbols))
+        return JsonResponse({"ok": True, "symbols": symbols, "count": len(symbols), "path": str(stocks_dir)})
+    except Exception as e:
+        logger.exception("api_today_csv_symbols failed")
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)

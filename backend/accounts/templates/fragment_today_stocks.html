@@ -11,12 +11,11 @@
   .wl-add { border:1px solid #e5e7eb; background:#fff; color:#0f172a; border-radius:10px; padding:8px 12px; cursor:pointer; }
   .wl-add:hover { background:#f8fafc; }
 
-  /* search (now under dropdown) */
   .wl-search { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
   #upd-ticker { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; background:#fff; color:#0f172a; }
   #upd-btn { border:1px solid #e5e7eb; background:#fff; color:#0f172a; border-radius:10px; padding:8px 12px; cursor:pointer; }
   #upd-btn[disabled]{ opacity:.6; cursor:not-allowed; }
-  #upd-status { color:#64748b; font-size:13px; margin: 4px 0 10px; }
+  #upd-status { color:#64748b; font-size:13px; margin:4px 0 10px; }
 
   .wl-list { list-style:none; padding:0; margin:0; }
   .wl-item { display:flex; align-items:center; justify-content:space-between; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; margin-bottom:8px; background:#fff; cursor:pointer; }
@@ -27,6 +26,28 @@
 
   .sec-title { font-size:13px; font-weight:700; color:#334155; margin:10px 0 6px; text-transform:uppercase; letter-spacing:.04em; }
   .hint { color:#64748b; font-size:13px; margin-top:8px; }
+
+  /* Right column: table container */
+  .card { background:#0b0f16; border:1px solid #1f2937; border-radius:14px; padding:12px; color:#e8edf4; }
+  .card-header { display:flex; align-items:center; justify-content:space-between; padding:6px 4px 10px; }
+  .card-title { font-weight:700; letter-spacing:.02em; }
+  .pager { display:flex; gap:6px; align-items:center; }
+  .btn-sm { border:1px solid #334155; background:#0b0f16; color:#e8edf4; border-radius:10px; padding:6px 10px; cursor:pointer; }
+  .btn-sm:hover { background:#111827; }
+  .btn-sm[disabled]{ opacity:.5; cursor:not-allowed; }
+
+  table.tbl { width:100%; border-collapse:collapse; }
+  table.tbl th, table.tbl td { padding:10px 8px; border-bottom:1px solid #1f2937; font-size:14px; vertical-align:top; }
+  table.tbl th { text-align:left; color:#9fb3c8; font-weight:600; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2a3a4f; margin:0 6px 6px 0; font-size:12px; }
+  .pill.buy { background:#14351f; color:#7be495; border-color:#1f5a30; }
+  .pill.sig { background:#13273c; color:#8cc3ff; border-color:#214163; }
+  .pill.other { background:#37260f; color:#f5c46b; border-color:#5c441a; }
+
+  .pagination { display:flex; gap:6px; justify-content:flex-end; margin-top:10px; }
+  .page-btn { border:1px solid #334155; background:#0b0f16; color:#e8edf4; border-radius:8px; padding:6px 10px; cursor:pointer; }
+  .page-btn:hover { background:#111827; }
+  .page-btn.active { background:#1f2937; }
 </style>
 
 <div class="frag-layout">
@@ -42,7 +63,7 @@
       <button id="wl-add-btn" class="wl-add" type="button">+</button>
     </div>
 
-    <!-- Search moved here (under dropdown) -->
+    <!-- Search under dropdown -->
     <form id="upd-form" class="wl-search" autocomplete="off" method="post">
       {% csrf_token %}
       <input id="upd-ticker" name="ticker" placeholder="AAPL" />
@@ -53,15 +74,41 @@
     <div class="sec-title">Your tickers</div>
     <ul class="wl-list" id="wl-list"></ul>
 
-    <div class="sec-title">Today’s buy</div>
-    <ul class="wl-list" id="today-buy"></ul>
-
     <div class="hint">Hover a ticker to remove it. Click a ticker to copy it into the search box.</div>
   </aside>
 
-  <!-- Right column kept for future content -->
-  <div class="frag-content"></div>
+  <!-- Right: Today's Buy table -->
+  <div class="frag-content">
+    <div class="card" id="tb-card">
+      <div class="card-header">
+        <div class="card-title">Today’s buy</div>
+        <div class="pager">
+          <button class="btn-sm" id="tb-prev" type="button">&lt;</button>
+          <button class="btn-sm" id="tb-next" type="button">&gt;</button>
+        </div>
+      </div>
+
+      <table class="tbl" id="tb-table">
+        <thead>
+          <tr>
+            <th style="width:120px;">Date</th>
+            <th>Buy</th>
+            <th>Signals met</th>
+            <th>Other signals</th>
+          </tr>
+        </thead>
+        <tbody id="tb-body">
+          <!-- rows injected by JS -->
+        </tbody>
+      </table>
+
+      <div class="pagination" id="tb-pages">
+        <!-- page numbers injected by JS -->
+      </div>
+    </div>
+  </div>
 </div>
+
 
 
 

@@ -126,7 +126,7 @@ def isKalmanUptrend(view: pd.DataFrame) -> pd.Series:
 
 
 
-def is_hh_hl(df):
+def get_utdt(df):
     # your original lines
     is_up = isKalmanUptrend(df)
 
@@ -146,7 +146,6 @@ def is_hh_hl(df):
         dt = [np.arange(d, u) for d, u in zip(tf_down_idx[-k:][::-1], ft_up_idx[-k:][::-1]) if u >= d]
         ut = [np.arange(u, d) for d, u in zip(tf_down_idx[-k:][::-1], ft_up_idx[-k-1:-1][::-1]) if d >= u]
         last_ut = np.arange(ft_up_idx[-1],is_up.index[-1]+1)
-        # print(last_ut)
         ut.insert(0,last_ut)
         up_idx_shift+=1
 
@@ -156,21 +155,50 @@ def is_hh_hl(df):
         last_dt = np.arange(tf_down_idx[-1],is_up.index[-1]+1)
         dt.insert(0,last_dt)
         dn_idx_shift+=1
+        
+    return ut, dt, up_idx_shift, dn_idx_shift
+        
+        
 
-    isHL = np.zeros(len(is_up))
-    isHH = np.zeros(len(is_up))
+def is_hh_hl(df):
+    
+    ut,dt,ui,di = get_utdt(df)
+    
+    isHL = np.zeros(len(df))
+    isHH = np.zeros(len(df))
 
     for i in range(1, np.min([len(dt), len(ut)]) - 1):
         
         if np.min(df.iloc[dt[i]]["close"]) > np.min(df.iloc[dt[i+1]]["close"]):
             isHL[dt[i-1]] = 1
-            isHL[ut[i-1+up_idx_shift]] = 1
+            isHL[ut[i-1+ui]] = 1
             
         if np.max(df.iloc[ut[i]]["close"]) > np.max(df.iloc[ut[i+1]]["close"]):
             isHH[ut[i-1]] = 1
-            isHH[dt[i-1+dn_idx_shift]] = 1
+            isHH[dt[i-1+di]] = 1
 
     return isHH, isHL
+
+
+
+def is_lh_ll(df):
+    
+    ut,dt,ui,di = get_utdt(df)
+    
+    isLH = np.zeros(len(df))
+    isLL = np.zeros(len(df))
+
+    for i in range(1, np.min([len(dt), len(ut)]) - 1):
+        
+        if np.min(df.iloc[dt[i]]["close"]) < np.min(df.iloc[dt[i+1]]["close"]):
+            isLL[dt[i-1]] = 1
+            isLL[ut[i-1+ui]] = 1
+            
+        if np.max(df.iloc[ut[i]]["close"]) < np.max(df.iloc[ut[i+1]]["close"]):
+            isLH[ut[i-1]] = 1
+            isLH[dt[i-1+di]] = 1
+
+    return isLH, isLL
 
 
 
@@ -323,3 +351,164 @@ def isKalman_regression_down_break(df: pd.DataFrame, scope: str = "any_bar") -> 
             run_start = None
 
     return out
+
+
+def is_broke_above_resis(df: pd.DataFrame):
+    """
+    Prints when a regression-down run starts/extends, its slope, and the
+    (timestamp, price) pairs of the peaks used so far. Returns a boolean Series
+    'broke_resistance' where close > current regression prediction (no look-ahead).
+    """
+    ut, dt, _, __ = get_utdt(df)   # expects lists of index arrays for up/down runs
+    # make chronological if your helper returns newest-first
+    ut = ut[::-1]
+    dt = dt[::-1]
+
+    # drop an active (unconcluded) last uptrend, if present
+    if len(ut) > len(dt):
+        ut = ut[:-1]
+    if len(ut) < 2:
+        return pd.Series(False, index=df.index, name="broke_reg_dn")
+
+    ts_vals = pd.to_datetime(df["ts"]).to_numpy()
+    close_v = pd.to_numeric(df["close"], errors="coerce").to_numpy()
+    n = len(df)
+
+    pred = np.full(n, np.nan, dtype=float)  # predicted price from latest regression
+
+    def fmt_peaks(peaks):
+        # peaks: list[(idx, px)]
+        return ", ".join(f"{pd.Timestamp(ts_vals[i]).isoformat()} @ {px:.2f}" for i, px in peaks)
+
+    peaks = []         # accumulating run of strictly-decreasing uptrend peaks
+    run_active = False
+
+    for i in range(1, len(ut)):
+        prev_seg = np.asarray(ut[i-1], dtype=int)
+        curr_seg = np.asarray(ut[i],   dtype=int)
+
+        # previous uptrend peak (max close)
+        prev_rel = int(np.nanargmax(close_v[prev_seg]))
+        prev_idx = int(prev_seg[prev_rel])
+        prev_px  = float(close_v[prev_idx])
+
+        # current uptrend peak (max close)
+        curr_rel = int(np.nanargmax(close_v[curr_seg]))
+        curr_idx = int(curr_seg[curr_rel])
+        curr_px  = float(close_v[curr_idx])
+
+        if curr_px <= prev_px:
+            # continuing / starting a decreasing-peaks run
+            if not run_active:
+                peaks = [(prev_idx, prev_px), (curr_idx, curr_px)]
+                run_active = True
+                print("\n▶ a new regression downtrend")
+            else:
+                peaks.append((curr_idx, curr_px))
+                print("\n↻ update regression downtrend")
+
+            xs = np.array([p[0] for p in peaks], dtype=float)
+            ys = np.array([p[1] for p in peaks], dtype=float)
+            m, b = np.polyfit(xs, ys, 1)
+
+            print(f"Peaks [{len(peaks)}]: {fmt_peaks(peaks)}")
+            print(f"Slope: {m:.6g}")
+
+            # ---- Update predictions (no look-ahead) ----
+            # start one bar AFTER the current uptrend concludes
+            start_idx = int(curr_seg[-1]) + 1
+            if start_idx < n:
+                idx = np.arange(start_idx, n, dtype=int)
+                pred[idx] = m * idx.astype(float) + b
+        else:
+            # decreasing pattern broken → reset
+            peaks.clear()
+            run_active = False
+
+    # Close > predicted line only where prediction exists
+    broke_resistance = pd.Series(
+        (close_v > pred) & ~np.isnan(pred),
+        index=df.index,
+        name="broke_reg_dn",
+    )
+    return broke_resistance
+
+
+def is_broke_below_supp(df: pd.DataFrame) -> pd.Series:
+    """
+    Boolean mask where close < the current 'support' regression line, where that line
+    is fit through MIN(close) points of *concluded* Kalman uptrends that form a
+    monotonically non-decreasing sequence (curr_min >= prev_min).
+
+    - No look-ahead: predictions start at the bar AFTER the current uptrend concludes.
+    - Later fits overwrite earlier predictions forward in time.
+    - Returns a boolean Series aligned to df.index.
+    """
+    # up/down trend segments; if your get_utdt returns newest→oldest, we reverse
+    ut, dt, _, __ = get_utdt(df)
+    ut = ut[::-1]
+    dt = dt[::-1]
+
+    # drop an active (unconcluded) last uptrend, if present
+    if len(ut) > len(dt):
+        ut = ut[:-1]
+
+    n = len(df)
+    if n == 0 or len(ut) < 2:
+        return pd.Series(False, index=df.index, name="broke_below_supp")
+
+    close_v = pd.to_numeric(df["close"], errors="coerce").to_numpy()
+    pred = np.full(n, np.nan, dtype=float)  # running prediction from latest regression
+
+    troughs: list[tuple[int, float]] = []  # (index, min_close) points in the current increasing run
+    run_active = False
+
+    for i in range(1, len(ut)):
+        prev_seg = np.asarray(ut[i-1], dtype=int)
+        curr_seg = np.asarray(ut[i],   dtype=int)
+
+        # previous uptrend trough (min close)
+        prev_vals = close_v[prev_seg]
+        if prev_vals.size == 0 or np.all(np.isnan(prev_vals)):
+            continue
+        prev_rel = int(np.nanargmin(prev_vals))
+        prev_idx = int(prev_seg[prev_rel])
+        prev_px  = float(close_v[prev_idx])
+
+        # current uptrend trough (min close)
+        curr_vals = close_v[curr_seg]
+        if curr_vals.size == 0 or np.all(np.isnan(curr_vals)):
+            continue
+        curr_rel = int(np.nanargmin(curr_vals))
+        curr_idx = int(curr_seg[curr_rel])
+        curr_px  = float(close_v[curr_idx])
+
+        # monotonically non-decreasing troughs → continue/update regression
+        if curr_px >= prev_px:
+            if not run_active:
+                troughs = [(prev_idx, prev_px), (curr_idx, curr_px)]
+                run_active = True
+            else:
+                troughs.append((curr_idx, curr_px))
+
+            xs = np.array([t[0] for t in troughs], dtype=float)
+            ys = np.array([t[1] for t in troughs], dtype=float)
+            m, b = np.polyfit(xs, ys, 1)
+
+            # ---- No look-ahead: start AFTER current uptrend ends ----
+            start_idx = int(curr_seg[-1]) + 1
+            if start_idx < n:
+                idx = np.arange(start_idx, n, dtype=int)
+                pred[idx] = m * idx.astype(float) + b
+        else:
+            # increasing-troughs sequence broken → reset
+            troughs.clear()
+            run_active = False
+
+    # Close < predicted support only where prediction exists
+    broke_below = pd.Series(
+        (close_v < pred) & ~np.isnan(pred),
+        index=df.index,
+        name="broke_below_supp",
+    )
+    return broke_below

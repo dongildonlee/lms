@@ -777,10 +777,181 @@ async function updateAllWatchlist($root, csrf) {
   renderTodaysBuy($root);
 }
 
+
+const TB_PAGE_SIZE = 10; // 10 dates per page
+
+  function tb_seededRandom(seed) {
+    // Mulberry32
+    let t = seed + 0x6D2B79F5;
+    return function() {
+      t = Math.imul(t ^ (t >>> 15), 1 | t);
+      t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  
+  function tb_buildRows(days = 60) {
+    // Build last N days including today; most recent first
+    const wl = wlLoad();
+    const out = [];
+    const today = new Date(); today.setHours(0,0,0,0);
+  
+    for (let d = 0; d < days; d++) {
+      const dt = new Date(today.getTime() - d * 86400000);
+      const iso = dt.toISOString().slice(0,10);
+  
+      if (wl.length === 0) {
+        out.push({ date: iso, buys: [], signals: [], other: [] });
+        continue;
+      }
+  
+      // deterministic picks per day so pagination is stable
+      const rnd = tb_seededRandom(Number(iso.replace(/-/g,'')));
+      const shuffled = wl.slice();
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const buys = shuffled.slice(0, Math.min(2, shuffled.length));
+  
+      // toy signals for placeholder UX
+      const SIGS = ["BR","Kalman","SG_Long","HH","HL","LH","LL"];
+      function pickSigs(n) {
+        const s = [];
+        for (let i = 0; i < n; i++) s.push(SIGS[Math.floor(rnd()*SIGS.length)]);
+        return Array.from(new Set(s));
+      }
+      const signals = buys.map(b => `${b}: ${pickSigs(2).join(", ")}`);
+      const other   = shuffled.slice(2, Math.min(6, shuffled.length)).map(b => `${b}: ${pickSigs(1).join(", ")}`);
+  
+      out.push({ date: iso, buys, signals, other });
+    }
+    return out; // [{date, buys:[], signals:[], other:[]}] newest first
+  }
+  
+  function tb_renderPage($root, state) {
+    const $tbody = $root.querySelector("#tb-body");
+    const $pages = $root.querySelector("#tb-pages");
+    if (!$tbody || !$pages) return;
+  
+    const start = state.page * TB_PAGE_SIZE;
+    const end   = Math.min(start + TB_PAGE_SIZE, state.rows.length);
+    const slice = state.rows.slice(start, end);
+  
+    // body
+    $tbody.innerHTML = "";
+    for (const row of slice) {
+      const tr = document.createElement("tr");
+  
+      const tdDate = document.createElement("td");
+      tdDate.textContent = row.date;
+  
+      const tdBuy = document.createElement("td");
+      if (row.buys.length) {
+        for (const b of row.buys) {
+          const span = document.createElement("span");
+          span.className = "pill buy";
+          span.textContent = b;
+          tdBuy.appendChild(span);
+        }
+      } else {
+        tdBuy.innerHTML = "<span class='hint'>—</span>";
+      }
+  
+      const tdSig = document.createElement("td");
+      if (row.signals.length) {
+        for (const s of row.signals) {
+          const span = document.createElement("span");
+          span.className = "pill sig";
+          span.textContent = s;
+          tdSig.appendChild(span);
+        }
+      } else {
+        tdSig.innerHTML = "<span class='hint'>—</span>";
+      }
+  
+      const tdOther = document.createElement("td");
+      if (row.other.length) {
+        for (const s of row.other) {
+          const span = document.createElement("span");
+          span.className = "pill other";
+          span.textContent = s;
+          tdOther.appendChild(span);
+        }
+      } else {
+        tdOther.innerHTML = "<span class='hint'>—</span>";
+      }
+  
+      tr.appendChild(tdDate);
+      tr.appendChild(tdBuy);
+      tr.appendChild(tdSig);
+      tr.appendChild(tdOther);
+      $tbody.appendChild(tr);
+    }
+  
+    // pagination numbers
+    $pages.innerHTML = "";
+    const totalPages = Math.max(1, Math.ceil(state.rows.length / TB_PAGE_SIZE));
+    for (let i = 0; i < totalPages; i++) {
+      const btn = document.createElement("button");
+      btn.className = "page-btn" + (i === state.page ? " active" : "");
+      btn.type = "button";
+      btn.textContent = String(i + 1);
+      btn.addEventListener("click", () => {
+        state.page = i;
+        tb_updateNav($root, state);
+        tb_renderPage($root, state);
+        // scroll to top of card on page change for better UX
+        $root.querySelector("#tb-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      $pages.appendChild(btn);
+    }
+  }
+  
+  function tb_updateNav($root, state) {
+    const totalPages = Math.max(1, Math.ceil(state.rows.length / TB_PAGE_SIZE));
+    const $prev = $root.querySelector("#tb-prev");
+    const $next = $root.querySelector("#tb-next");
+    if ($prev) {
+      $prev.disabled = (state.page <= 0);
+      $prev.onclick = () => {
+        if (state.page > 0) { state.page -= 1; tb_updateNav($root, state); tb_renderPage($root, state); }
+      };
+    }
+    if ($next) {
+      $next.disabled = (state.page >= totalPages - 1);
+      $next.onclick = () => {
+        if (state.page < totalPages - 1) { state.page += 1; tb_updateNav($root, state); tb_renderPage($root, state); }
+      };
+    }
+  }
+  
+  function tb_init($root) {
+    // build rows and render first page
+    const state = { rows: tb_buildRows(60), page: 0 };
+    tb_updateNav($root, state);
+    tb_renderPage($root, state);
+    // keep a handle so we can refresh after WL updates
+    $root.__tb_state = state;
+  }
+  
+  function tb_refresh($root) {
+    if (!$root) return;
+    const state = $root.__tb_state || { page: 0 };
+    state.rows = tb_buildRows(60);
+    state.page = Math.min(state.page, Math.max(0, Math.ceil(state.rows.length / TB_PAGE_SIZE) - 1));
+    tb_updateNav($root, state);
+    tb_renderPage($root, state);
+    $root.__tb_state = state;
+  }
+  
+
 // --- Wire the fragment once injected ---
 function initTodayFragment($root) {
   // render existing WL
   wlRender($root);
+  // Initialize Today’s buy table now
+  tb_init($root);
 
   // WL interactions
   const $list = $root.querySelector("#wl-list");
@@ -834,10 +1005,18 @@ function initTodayFragment($root) {
     } finally {
       if ($btn) $btn.disabled = false;
     }
+    
   });
 
   // Auto-update all watchlist on load
   updateAllWatchlist($root, csrf);
+
+  // Auto-update all watchlist on load (already present)
+  updateAllWatchlist($root, csrf).then(() => {
+    // refresh table after updates so it reflects current WL
+    tb_refresh($root);
+  });
+
 }
 
 // ---------------------------
