@@ -1913,3 +1913,260 @@ def api_today_csv_symbols(request):
     except Exception as e:
         logger.exception("api_today_csv_symbols failed")
         return JsonResponse({"ok": False, "error": str(e)}, status=500)
+    
+    
+
+# signal imports (as you described)
+from accounts.strategies.signals import (
+    isKalmanUptrend, isKalmanBuy, isKalmanSell,
+    is_hh_hl, is_lh_ll, isLorentzianBuy, isLorentzianSell,
+    is_broke_above_resis, is_broke_below_supp,
+)
+from accounts.strategies.sg import sg_indicators_bool
+
+# signals
+from accounts.strategies.signals import (
+    isKalmanBuy,      # KB
+    isLorentzianBuy,  # LB
+    is_hh_hl,         # HH, HL
+    is_broke_above_resis,  # BR
+)
+from accounts.strategies.sg import sg_indicators_bool  # SG_Long
+
+# ---- helpers ---------------------------------------------------------------
+
+def _stocks_dir() -> Path | None:
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[1] / "data" / "stocks",  # backend/data/stocks
+        here.parents[2] / "data" / "stocks",  # lms/data/stocks (fallback)
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return None
+
+def _load_symbol_df(sym: str) -> pd.DataFrame | None:
+    base = _stocks_dir()
+    if not base:
+        return None
+    f = base / f"HistoricalData_{sym}.csv"
+    if not f.exists():
+        return None
+    try:
+        df = pd.read_csv(f)
+    except Exception:
+        return None
+
+    # Normalize columns
+    # Try common date columns: 'date', 'Date', 'ts'
+    if "date" in df.columns:
+        dt = pd.to_datetime(df["date"], errors="coerce")
+    elif "Date" in df.columns:
+        dt = pd.to_datetime(df["Date"], errors="coerce")
+    elif "ts" in df.columns:
+        dt = pd.to_datetime(df["ts"], errors="coerce")
+    else:
+        return None
+
+    df = df.copy()
+    df["__date"] = dt.dt.date  # pure date for grouping
+    df = df.dropna(subset=["__date"])
+
+    # If prices have leading $ strings from Nasdaq CSV, strip to float where useful
+    for col in ["Open", "High", "Low", "Close", "Close/Last", "open", "high", "low", "close"]:
+        if col in df.columns and df[col].dtype == object:
+            df[col] = (
+                df[col].astype(str).str.replace(r"[^0-9.\-]", "", regex=True)
+                  .replace("", pd.NA).astype(float)
+            )
+
+    return df
+
+def _compute_flags(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute Boolean columns for key signals:
+      - BR (broke above resistance)
+      - KB (Kalman Buy)
+      - LB (Lorentzian Buy)
+      - SG (SG_Long)
+      - HH / HL (from is_hh_hl)
+    Ensures proper timestamp and column naming, and applies a minimum signal requirement (>=2).
+    """
+
+    # --- Normalize column names ---
+    df = df.rename(columns=str.lower)
+
+    # --- Fix close column naming ---
+    if "close/last" in df.columns and "close" not in df.columns:
+        df["close"] = df["close/last"]
+    if "adj close" in df.columns and "close" not in df.columns:
+        df["close"] = df["adj close"]
+
+    # --- Ensure timestamp column exists ---
+    if "ts" not in df.columns:
+        if "date" in df.columns:
+            df["ts"] = pd.to_datetime(df["date"], errors="coerce", utc=True)
+        elif "time" in df.columns:
+            df["ts"] = pd.to_datetime(df["time"], errors="coerce", utc=True)
+        else:
+            raise ValueError("No timestamp column ('date', 'time', or 'ts') found in CSV")
+
+    # --- Ensure volume column ---
+    if "volume" not in df.columns:
+        df["volume"] = 0.0
+
+    # --- Compute signals ---
+    BR = is_broke_above_resis(df)
+    KB = isKalmanBuy(df)
+    LB = isLorentzianBuy(df)
+    SG = sg_indicators_bool(df).get("SG_Long")
+    HH, HL = is_hh_hl(df)
+
+    # --- Safety: make sure everything is boolean and sized to df ---
+    def as_bool(x):
+        s = pd.Series(x)
+        if len(s) != len(df):
+            s = s.reindex(range(len(df))).fillna(False)
+        return s.astype(bool)
+
+    BR = as_bool(BR)
+    KB = as_bool(KB)
+    LB = as_bool(LB)
+    SG = as_bool(SG)
+    HH = as_bool(HH)
+    HL = as_bool(HL)
+
+    # --- Build unified boolean table ---
+    out = df.copy()
+    out["BR"] = BR
+    out["KB"] = KB
+    out["LB"] = LB
+    out["SG"] = SG
+    out["HH"] = HH
+    out["HL"] = HL
+
+    # --- ✅ Apply the ">= 2 total signals" rule ---
+    # Count all True signals per row (including hard + favorable)
+    signal_cols = ["BR", "KB", "LB", "SG", "HL"]
+    out["signal_count"] = out[signal_cols].sum(axis=1)
+
+    # Hard requirement mask: BR + KB must be True
+    out["meets_hard_requirements"] = out["BR"] & out["KB"]
+
+    # Meets at least 2 signals (total) condition
+    out["meets_min_signals"] = out["signal_count"] >= 2
+
+    # Combined filter (for convenience): Hard + min signals
+    out["meets_criteria"] = out["meets_hard_requirements"] & out["meets_min_signals"]
+
+    return out
+
+
+# ---- API -------------------------------------------------------------------
+
+@csrf_exempt
+@require_POST
+def api_today_recommendations(request: HttpRequest):
+    """
+    POST JSON: { "symbols": ["AAPL","TSLA",...], "days": 60 }
+    Returns:
+      { ok: true, rows: [
+          { date: "YYYY-MM-DD",
+            buys:   ["AAPL","TSLA"],
+            signals:["AAPL: BR, KB, SG", ...],
+            other:  ["MSFT: SG", "NVDA: LB, HL"]
+          }, ...
+        ]}
+
+    Requirements:
+      ✅ Hard requirement: BR == True and KB == True (same row/date)
+      ✅ Total signals (BR, KB, SG, LB, HL) ≥ 2
+      ✅ "Other" includes any ticker that fails the hard requirement but has at least one favorable (SG/LB/HL)
+    """
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        body = {}
+
+    symbols = body.get("symbols") or []
+    if not isinstance(symbols, list):
+        return JsonResponse({"ok": False, "error": "symbols must be a list"}, status=400)
+
+    days = int(body.get("days") or 60)
+    days = max(1, min(days, 400))
+
+    if not symbols:
+        return JsonResponse({"ok": True, "rows": []})
+
+    # --- Load and compute flags ---
+    by_sym: Dict[str, pd.DataFrame] = {}
+    for sym in symbols:
+        s = (str(sym) or "").upper().strip()
+        if not s:
+            continue
+        df = _load_symbol_df(s)
+        if df is None or df.empty:
+            continue
+        by_sym[s] = _compute_flags(df)
+
+    if not by_sym:
+        return JsonResponse({"ok": True, "rows": []})
+
+    # --- Build date set (newest first) ---
+    all_dates = set()
+    for df in by_sym.values():
+        all_dates.update(df["__date"].unique().tolist())
+    if not all_dates:
+        return JsonResponse({"ok": True, "rows": []})
+
+    dates_sorted = sorted(all_dates, reverse=True)[:days]
+    rows: List[Dict[str, Any]] = []
+
+    # --- Daily loop ---
+    for d in dates_sorted:
+        buys: List[str] = []
+        signals_col: List[str] = []
+        other_col: List[str] = []
+
+        for sym, df in by_sym.items():
+            day_df = df[df["__date"] == d]
+            if day_df.empty:
+                continue
+            last = day_df.iloc[-1]
+
+            br = bool(last.get("BR", False))
+            kb = bool(last.get("KB", False))
+            lb = bool(last.get("LB", False))
+            sg = bool(last.get("SG", False))
+            hl = bool(last.get("HL", False))
+
+            # Count how many signals are True
+            total_signals = sum([br, kb, lb, sg, hl])
+
+            # ✅ Hard buy condition: BR & KB must both be True AND total ≥ 2
+            if br and kb and total_signals >= 2:
+                extra = []
+                if sg: extra.append("SG")
+                if lb: extra.append("LB")
+                if hl: extra.append("HL")
+                label_bits = ["BR", "KB"] + extra
+                signals_col.append(f"{sym}: {', '.join(label_bits)}")
+                buys.append(sym)
+            else:
+                # ✅ Favorable but not full buy
+                fav = []
+                if sg: fav.append("SG")
+                if lb: fav.append("LB")
+                if hl: fav.append("HL")
+                if len(fav) >= 2:
+                    other_col.append(f"{sym}: {', '.join(fav)}")
+
+        rows.append({
+            "date": pd.to_datetime(d).strftime("%Y-%m-%d"),
+            "buys": buys,
+            "signals": signals_col,
+            "other": other_col,
+        })
+
+    return JsonResponse({"ok": True, "rows": rows})
